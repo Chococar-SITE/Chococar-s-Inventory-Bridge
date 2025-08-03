@@ -119,7 +119,8 @@ jobs:
         cp new_versions.json data/latest_versions.json
         
         # 檢查是否有變更
-        if git diff --quiet data/latest_versions.json; then
+        git add data/latest_versions.json
+        if git diff --staged --quiet; then
           echo "數據文件沒有變更"
           exit 0
         fi
@@ -128,9 +129,6 @@ jobs:
         BRANCH_NAME="auto-update-versions-$(date +%Y%m%d-%H%M%S)"
         echo "🌿 創建分支: $BRANCH_NAME"
         git checkout -b "$BRANCH_NAME"
-        
-        # 提交變更
-        git add data/latest_versions.json
         git commit -m "🔄 自動更新版本數據
 
         更新項目: ${{ steps.check.outputs.updates }}
@@ -163,6 +161,6 @@ jobs:
 
         ---
         *此 PR 由 GitHub Actions 自動創建於 $(date -u)*" \
-          --label "enhancement,auto-update,version-update"
+          --label "enhancement"
         
         echo "✅ Pull Request 已創建"
