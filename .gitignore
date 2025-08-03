@@ -132,3 +132,7 @@ pip-delete-this-directory.txt
 *.bak
 *.backup
 *.old
+
+# Important: Keep these files in version control
+# !data/latest_versions.json
+# !requirements.txt

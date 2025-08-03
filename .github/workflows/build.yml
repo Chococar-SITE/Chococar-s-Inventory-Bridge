@@ -64,34 +64,34 @@ jobs:
         # 設定對應的依賴版本
         case "$MC_VERSION" in
           "1.21.4")
-            echo "YARN_VERSION=1.21.4+build.1" >> $GITHUB_ENV
-            echo "FABRIC_API_VERSION=0.108.0+1.21.4" >> $GITHUB_ENV
+            echo "YARN_VERSION=1.21.4+build.8" >> $GITHUB_ENV
+            echo "FABRIC_API_VERSION=0.119.0+1.21.4" >> $GITHUB_ENV
             echo "PAPER_VERSION=1.21.4-R0.1-SNAPSHOT" >> $GITHUB_ENV
-            echo "DATA_VERSION=4080" >> $GITHUB_ENV
+            echo "DATA_VERSION=4082" >> $GITHUB_ENV
             ;;
           "1.21.5")
-            echo "YARN_VERSION=1.21.5+build.1" >> $GITHUB_ENV
-            echo "FABRIC_API_VERSION=0.109.0+1.21.5" >> $GITHUB_ENV
+            echo "YARN_VERSION=1.21.5+build.6" >> $GITHUB_ENV
+            echo "FABRIC_API_VERSION=0.119.2+1.21.5" >> $GITHUB_ENV
             echo "PAPER_VERSION=1.21.5-R0.1-SNAPSHOT" >> $GITHUB_ENV
-            echo "DATA_VERSION=4081" >> $GITHUB_ENV
+            echo "DATA_VERSION=4083" >> $GITHUB_ENV
             ;;
           "1.21.6")
             echo "YARN_VERSION=1.21.6+build.1" >> $GITHUB_ENV
             echo "FABRIC_API_VERSION=0.109.5+1.21.6" >> $GITHUB_ENV
             echo "PAPER_VERSION=1.21.6-R0.1-SNAPSHOT" >> $GITHUB_ENV
-            echo "DATA_VERSION=4081" >> $GITHUB_ENV
+            echo "DATA_VERSION=4083" >> $GITHUB_ENV
             ;;
           "1.21.7")
             echo "YARN_VERSION=1.21.7+build.1" >> $GITHUB_ENV
             echo "FABRIC_API_VERSION=0.110.0+1.21.7" >> $GITHUB_ENV
             echo "PAPER_VERSION=1.21.7-R0.1-SNAPSHOT" >> $GITHUB_ENV
-            echo "DATA_VERSION=4081" >> $GITHUB_ENV
+            echo "DATA_VERSION=4084" >> $GITHUB_ENV
             ;;
           "1.21.8")
             echo "YARN_VERSION=1.21.8+build.1" >> $GITHUB_ENV
             echo "FABRIC_API_VERSION=0.110.5+1.21.8" >> $GITHUB_ENV
             echo "PAPER_VERSION=1.21.8-R0.1-SNAPSHOT" >> $GITHUB_ENV
-            echo "DATA_VERSION=4082" >> $GITHUB_ENV
+            echo "DATA_VERSION=4085" >> $GITHUB_ENV
             ;;
         esac
         

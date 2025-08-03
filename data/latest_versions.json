@@ -1,0 +1,37 @@
+{
+  "1.21.4": {
+    "yarn_mappings": "1.21.4+build.8",
+    "fabric_api": "0.119.0+1.21.4",
+    "paper": "1.21.4-R0.1-SNAPSHOT",
+    "data_version": 4082,
+    "status": "complete"
+  },
+  "1.21.5": {
+    "yarn_mappings": "1.21.5+build.6",
+    "fabric_api": "0.119.2+1.21.5",
+    "paper": "1.21.5-R0.1-SNAPSHOT",
+    "data_version": 4083,
+    "status": "complete"
+  },
+  "1.21.6": {
+    "yarn_mappings": "1.21.6+build.1",
+    "fabric_api": "0.109.5+1.21.6",
+    "paper": "1.21.6-R0.1-SNAPSHOT",
+    "data_version": 4083,
+    "status": "complete"
+  },
+  "1.21.7": {
+    "yarn_mappings": "1.21.7+build.1",
+    "fabric_api": "0.110.0+1.21.7",
+    "paper": "1.21.7-R0.1-SNAPSHOT",
+    "data_version": 4084,
+    "status": "complete"
+  },
+  "1.21.8": {
+    "yarn_mappings": "1.21.8+build.1",
+    "fabric_api": "0.110.5+1.21.8",
+    "paper": "1.21.8-R0.1-SNAPSHOT",
+    "data_version": 4085,
+    "status": "complete"
+  }
+}
