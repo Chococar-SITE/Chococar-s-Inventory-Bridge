@@ -208,11 +208,19 @@ jobs:
       with:
         name: latest-versions
         
-    - name: Update workflow files
+    - name: Update data files only
       run: |
-        echo "🔄 更新工作流程文件..."
+        echo "🔄 只更新數據文件，不修改工作流程..."
         
-        cat > update_workflows.py << 'SCRIPT_EOF'
+        # 覆蓋 data/latest_versions.json 為最新版本
+        cp latest_versions.json data/latest_versions.json
+        
+        echo "✅ 已更新 data/latest_versions.json"
+        echo "📄 文件內容："
+        cat data/latest_versions.json
+        
+        # 移除所有工作流程文件修改代碼
+        cat > dummy_script.py << 'SCRIPT_EOF'
         import json
         import re
         
