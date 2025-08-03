@@ -1,5 +1,10 @@
 name: Auto Update Versions
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
 on:
   schedule:
     # 每週一早上 8:00 UTC 執行
@@ -186,6 +191,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
         
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -462,78 +468,80 @@ jobs:
         
         python update_scripts.py
         
-    - name: Commit changes
+    - name: Create Pull Request
       run: |
+        # 設置 Git 配置
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         
-        git add .
-        
-        if git diff --staged --quiet; then
+        # 檢查是否有變更
+        if git diff --quiet && git diff --staged --quiet; then
           echo "沒有變更需要提交"
-        else
-          echo "提交版本更新..."
-          git commit -m "🔄 自動更新版本 API
-
-          新版本: ${{ needs.check-versions.outputs.new_versions }}
-          更新時間: $(date -u)
-          
-          - 更新 GitHub Actions 工作流程
-          - 更新 gradle.properties
-          - 更新版本腳本
-          - 更新 README.md 版本資訊
-          
-          由 GitHub Actions 自動生成"
-          
-          git push
-          
-          echo "✅ 版本更新已提交"
-          
-          # 觸發構建工作流程來驗證新版本
-          echo "🚀 觸發構建工作流程..."
+          exit 0
         fi
         
-    - name: Create issue for new versions
-      if: needs.check-versions.outputs.new_versions != ''
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const newVersions = "${{ needs.check-versions.outputs.new_versions }}".split(' ').filter(v => v);
-          
-          if (newVersions.length > 0) {
-            const issueBody = `
-          ## 🎉 偵測到新的 Minecraft 版本
+        # 創建新分支
+        BRANCH_NAME="auto-update-versions-$(date +%Y%m%d-%H%M%S)"
+        echo "🌿 創建分支: $BRANCH_NAME"
+        git checkout -b "$BRANCH_NAME"
+        
+        # 添加所有變更
+        git add .
+        
+        # 提交變更
+        echo "📝 提交變更..."
+        git commit -m "🔄 自動更新版本 API
 
-          **新版本:** ${newVersions.join(', ')}
+        新版本: ${{ needs.check-versions.outputs.new_versions }}
+        更新時間: $(date -u)
+        
+        - 更新 GitHub Actions 工作流程
+        - 更新 gradle.properties  
+        - 更新版本腳本
+        - 更新 README.md 版本資訊
+        
+        由 GitHub Actions 自動生成"
+        
+        # 推送分支
+        echo "📤 推送分支..."
+        git push origin "$BRANCH_NAME"
+        
+        # 使用 GitHub CLI 創建 PR
+        echo "🔃 創建 Pull Request..."
+        gh pr create \
+          --title "🔄 自動更新版本 API - ${{ needs.check-versions.outputs.new_versions }}" \
+          --body "$(cat <<'EOF'
+        ## 🎯 自動版本更新
 
-          ### 自動更新內容
-          - ✅ 更新 GitHub Actions 工作流程版本矩陣
-          - ✅ 更新 gradle.properties 預設版本
-          - ✅ 更新版本切換腳本
-          - ✅ 更新 README.md 版本資訊
+        **更新內容:** ${{ needs.check-versions.outputs.new_versions }}
 
-          ### 需要手動檢查
-          - [ ] 驗證新版本的依賴可用性
-          - [ ] 測試構建流程
-          - [ ] 更新文檔中的版本說明
-          - [ ] 確認兼容性處理是否需要調整
+        ### 📋 變更摘要
+        - ✅ 更新 GitHub Actions 工作流程版本矩陣
+        - ✅ 更新 gradle.properties 預設版本  
+        - ✅ 更新版本切換腳本
+        - ✅ 更新 README.md 版本資訊
 
-          ### 相關連結
-          - [構建工作流程](https://github.com/${{ github.repository }}/actions/workflows/build.yml)
-          - [版本腳本](https://github.com/${{ github.repository }}/blob/main/scripts/update-version.sh)
+        ### 🔍 檢測到的更新
+        $(echo "${{ needs.check-versions.outputs.new_versions }}" | tr ' ' '\n' | sed 's/^/- /')
 
-          ---
-          *此 issue 由 GitHub Actions 自動創建於 ${new Date().toISOString()}*
-          `;
+        ### 🚀 下一步
+        - [ ] 審查變更內容
+        - [ ] 測試構建流程
+        - [ ] 合併 PR
 
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `🔄 新 Minecraft 版本: ${newVersions.join(', ')}`,
-              body: issueBody,
-              labels: ['enhancement', 'auto-update', 'version-update']
-            });
-          }
+        ---
+        *此 PR 由 GitHub Actions 自動創建於 $(date -u)*
+        EOF
+        )" \
+          --assignee "@me" \
+          --label "enhancement,auto-update,version-update"
+        
+        echo "✅ Pull Request 已創建"
+        
+    - name: Comment on PR with build trigger
+      run: |
+        echo "🚀 準備觸發構建工作流程來驗證新版本..."
+        # 構建會在 PR 創建後自動觸發
 
   test-build:
     needs: [check-versions, update-workflows]
