@@ -30,9 +30,12 @@ class VersionFetcher:
             for version in data['versions']:
                 if version['type'] == 'release':
                     ver = version['id']
-                    # 只保留 1.21.x 版本
+                    # 只保留 1.21.4 以後的版本
                     if re.match(r'^1\.21\.\d+$', ver):
-                        versions.append(ver)
+                        # 提取版本號並檢查是否 >= 1.21.4
+                        version_parts = [int(x) for x in ver.split('.')]
+                        if version_parts >= [1, 21, 4]:
+                            versions.append(ver)
             
             # 排序版本（從新到舊）
             versions.sort(key=lambda x: [int(i) for i in x.split('.')], reverse=True)
@@ -45,24 +48,34 @@ class VersionFetcher:
     def get_fabric_api_version(self, mc_version: str) -> Optional[str]:
         """獲取指定 Minecraft 版本的最新 Fabric API 版本"""
         try:
-            # 使用 CurseForge API 或 Modrinth API
-            # 這裡使用 Fabric 官方的版本 API
-            response = self.session.get(f'https://meta.fabricmc.net/v2/versions/game/{mc_version}')
-            if response.status_code == 404:
+            # 首先檢查 Fabric 是否支援該 MC 版本
+            fabric_check = self.session.get(f'https://meta.fabricmc.net/v2/versions/game/{mc_version}')
+            if fabric_check.status_code == 404:
+                print(f"⚠️ Fabric 尚未支援 Minecraft {mc_version}", file=sys.stderr)
                 return None
-                
-            response.raise_for_status()
             
-            # 獲取 Fabric API 的最新版本
-            api_response = self.session.get('https://api.modrinth.com/v2/project/fabric-api/version')
+            # 使用 Modrinth API 獲取 Fabric API 版本
+            import urllib.parse
+            game_versions = urllib.parse.quote(f'["{mc_version}"]')
+            api_url = f'https://api.modrinth.com/v2/project/fabric-api/version?game_versions={game_versions}&featured=true'
+            api_response = self.session.get(api_url)
             api_response.raise_for_status()
             api_data = api_response.json()
             
-            # 找到支援該 MC 版本的最新 Fabric API
-            for version in api_data:
-                if mc_version in version.get('game_versions', []):
-                    return version['version_number']
+            # 如果沒有 featured 版本，嘗試獲取所有版本
+            if not api_data:
+                api_url = f'https://api.modrinth.com/v2/project/fabric-api/version?game_versions={game_versions}'
+                api_response = self.session.get(api_url)
+                api_response.raise_for_status()
+                api_data = api_response.json()
             
+            # 找到最新版本
+            if api_data:
+                # 按日期排序，取最新的
+                api_data.sort(key=lambda x: x['date_published'], reverse=True)
+                return api_data[0]['version_number']
+            
+            print(f"⚠️ 找不到 Minecraft {mc_version} 的 Fabric API 版本", file=sys.stderr)
             return None
             
         except Exception as e:
@@ -134,7 +147,27 @@ class VersionFetcher:
             detail_response.raise_for_status()
             detail_data = detail_response.json()
             
-            return detail_data.get('worldVersion')
+            # 嘗試多個可能的字段名
+            data_version = (detail_data.get('worldVersion') or 
+                          detail_data.get('dataVersion') or 
+                          detail_data.get('protocolVersion'))
+            
+            # 如果還是沒有，嘗試從已知版本映射獲取
+            if not data_version:
+                version_mapping = {
+                    '1.21.4': 4082,
+                    '1.21.5': 4083,
+                    '1.21.6': 4083,
+                    '1.21.7': 4084,
+                    '1.21.8': 4085,
+                    '1.21.9': 4086,  # 預估
+                    '1.21.10': 4087  # 預估
+                }
+                data_version = version_mapping.get(mc_version)
+                if data_version:
+                    print(f"ℹ️ 使用預設數據版本 {mc_version}: {data_version}", file=sys.stderr)
+            
+            return data_version
             
         except Exception as e:
             print(f"❌ 獲取數據版本失敗 ({mc_version}): {e}", file=sys.stderr)
