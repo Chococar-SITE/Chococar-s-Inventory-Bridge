@@ -108,6 +108,8 @@ jobs:
         
     - name: Create Pull Request for updates
       if: steps.check.outputs.has_updates == 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         # 設置 Git 配置
         git config --local user.email "action@github.com"
