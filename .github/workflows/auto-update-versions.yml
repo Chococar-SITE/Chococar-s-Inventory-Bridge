@@ -163,7 +163,6 @@ jobs:
 
         ---
         *此 PR 由 GitHub Actions 自動創建於 $(date -u)*" \
-          --assignee "@me" \
           --label "enhancement,auto-update,version-update"
         
         echo "✅ Pull Request 已創建"
