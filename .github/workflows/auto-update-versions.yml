@@ -44,17 +44,15 @@ jobs:
         
         # 執行版本檢查腳本
         if [ -n "${{ github.event.inputs.target_versions }}" ]; then
-          if ! python scripts/fetch-latest-versions.py --versions ${{ github.event.inputs.target_versions }} --output json > latest_versions.json 2>&1; then
+          echo "🔍 正在獲取指定版本：${{ github.event.inputs.target_versions }}"
+          if ! python scripts/fetch-latest-versions.py --versions ${{ github.event.inputs.target_versions }} --output json > latest_versions.json; then
             echo "❌ 版本檢查腳本執行失敗"
-            echo "腳本輸出："
-            cat latest_versions.json || echo "無法讀取輸出文件"
             exit 1
           fi
         else
-          if ! python scripts/fetch-latest-versions.py --output json > latest_versions.json 2>&1; then
+          echo "🔍 正在獲取最新版本..."
+          if ! python scripts/fetch-latest-versions.py --output json > latest_versions.json; then
             echo "❌ 版本檢查腳本執行失敗"
-            echo "腳本輸出："
-            cat latest_versions.json || echo "無法讀取輸出文件"
             exit 1
           fi
         fi
@@ -65,54 +63,92 @@ jobs:
           
           # 創建基本的版本數據作為備用
           cat > latest_versions.json << 'BACKUP_JSON'
-        {
-          "1.21.4": {
-            "yarn_mappings": "1.21.4+build.1",
-            "fabric_api": "0.119.0+1.21.4",
-            "paper": "1.21.4-R0.1-SNAPSHOT",
-            "data_version": 4082,
-            "status": "complete"
-          },
-          "1.21.5": {
-            "yarn_mappings": "1.21.5+build.6",
-            "fabric_api": "0.119.2+1.21.5",
-            "paper": "1.21.5-R0.1-SNAPSHOT",
-            "data_version": 4083,
-            "status": "complete"
-          },
-          "1.21.6": {
-            "yarn_mappings": "1.21.6+build.1",
-            "fabric_api": "0.109.5+1.21.6",
-            "paper": "1.21.6-R0.1-SNAPSHOT",
-            "data_version": 4083,
-            "status": "complete"
-          }
-        }
-        BACKUP_JSON
+{
+  "1.21.4": {
+    "yarn_mappings": "1.21.4+build.1",
+    "fabric_api": "0.119.0+1.21.4",
+    "paper": "1.21.4-R0.1-SNAPSHOT",
+    "data_version": 4082,
+    "status": "complete"
+  },
+  "1.21.5": {
+    "yarn_mappings": "1.21.5+build.6",
+    "fabric_api": "0.119.2+1.21.5",
+    "paper": "1.21.5-R0.1-SNAPSHOT",
+    "data_version": 4083,
+    "status": "complete"
+  },
+  "1.21.6": {
+    "yarn_mappings": "1.21.6+build.1",
+    "fabric_api": "0.109.5+1.21.6",
+    "paper": "1.21.6-R0.1-SNAPSHOT",
+    "data_version": 4083,
+    "status": "complete"
+  }
+}
+BACKUP_JSON
           
           echo "⚠️ 使用備用版本數據"
         fi
         
+        # 驗證 JSON 格式
+        echo "🔍 驗證 JSON 格式..."
+        if ! python -c "import json; json.load(open('latest_versions.json'))"; then
+          echo "❌ JSON 格式驗證失敗，重新生成備用數據"
+          cat > latest_versions.json << 'BACKUP_JSON'
+{
+  "1.21.4": {
+    "yarn_mappings": "1.21.4+build.1",
+    "fabric_api": "0.119.0+1.21.4",
+    "paper": "1.21.4-R0.1-SNAPSHOT",
+    "data_version": 4082,
+    "status": "complete"
+  },
+  "1.21.5": {
+    "yarn_mappings": "1.21.5+build.6",
+    "fabric_api": "0.119.2+1.21.5",
+    "paper": "1.21.5-R0.1-SNAPSHOT",
+    "data_version": 4083,
+    "status": "complete"
+  }
+}
+BACKUP_JSON
+        fi
+        
         echo "✅ 版本數據獲取成功"
+        
+        # 顯示 JSON 文件內容進行調試
+        echo "🔍 檢查生成的 JSON 文件內容："
+        echo "文件大小: $(wc -c < latest_versions.json) bytes"
+        echo "前100個字符:"
+        head -c 100 latest_versions.json || echo "無法讀取文件"
+        echo ""
         
         # 檢查是否有新版本
         python -c "
         import json
         import re
+        import sys
         
         # 讀取最新版本數據
         try:
             with open('latest_versions.json', 'r') as f:
                 content = f.read().strip()
+                print(f'文件內容長度: {len(content)}', file=sys.stderr)
                 if not content:
-                    print('❌ latest_versions.json 文件為空')
+                    print('❌ latest_versions.json 文件為空', file=sys.stderr)
                     exit(1)
+                print('嘗試解析 JSON...', file=sys.stderr)
                 latest_data = json.loads(content)
+                print(f'成功解析 JSON，包含 {len(latest_data)} 個版本', file=sys.stderr)
         except FileNotFoundError:
-            print('❌ latest_versions.json 文件不存在')
+            print('❌ latest_versions.json 文件不存在', file=sys.stderr)
             exit(1)
         except json.JSONDecodeError as e:
-            print(f'❌ JSON 解析錯誤: {e}')
+            print(f'❌ JSON 解析錯誤: {e}', file=sys.stderr)
+            print('文件內容:', file=sys.stderr)
+            with open('latest_versions.json', 'r') as f:
+                print(repr(f.read()[:200]), file=sys.stderr)
             exit(1)
         
         # 讀取當前 build.yml 中的版本
