@@ -50,7 +50,7 @@ jobs:
         fi
         
         # 檢查是否有新版本
-        python << 'EOF'
+        python -c "
         import json
         import re
         
@@ -63,28 +63,28 @@ jobs:
             build_content = f.read()
         
         # 提取當前支援的版本
-        current_versions = re.findall(r'"(1\.21\.\d+)"', build_content)
+        current_versions = re.findall(r'\"(1\.21\.\d+)\"', build_content)
         current_versions = set(current_versions)
         
         # 檢查新版本
         latest_versions = set(latest_data.keys())
         new_versions = latest_versions - current_versions
         
-        print(f"目前版本: {sorted(current_versions)}")
-        print(f"最新版本: {sorted(latest_versions)}")
-        print(f"新版本: {sorted(new_versions)}")
+        print(f'目前版本: {sorted(current_versions)}')
+        print(f'最新版本: {sorted(latest_versions)}')
+        print(f'新版本: {sorted(new_versions)}')
         
-        has_updates = len(new_versions) > 0 or "${{ github.event.inputs.force_update }}" == "true"
+        has_updates = len(new_versions) > 0 or '${{ github.event.inputs.force_update }}' == 'true'
         
         # 輸出結果
         with open('$GITHUB_OUTPUT', 'a') as f:
-            f.write(f"has_updates={str(has_updates).lower()}\n")
-            f.write(f"new_versions={' '.join(sorted(new_versions))}\n")
+            f.write(f'has_updates={str(has_updates).lower()}\n')
+            f.write(f'new_versions={\" \".join(sorted(new_versions))}\n')
         
-        print(f"有更新: {has_updates}")
+        print(f'有更新: {has_updates}')
         if new_versions:
-            print(f"新版本: {', '.join(sorted(new_versions))}")
-        EOF
+            print(f'新版本: {\", \".join(sorted(new_versions))}')
+        "
         
     - name: Upload version data
       if: steps.check.outputs.has_updates == 'true'
@@ -124,7 +124,7 @@ jobs:
       run: |
         echo "🔄 更新工作流程文件..."
         
-        python << 'EOF'
+        cat > update_workflows.py << 'SCRIPT_EOF'
         import json
         import re
         
@@ -155,12 +155,7 @@ jobs:
         for version, data in versions_data.items():
             if data['status'] != 'complete':
                 continue
-            case = f'''          "{version}")
-            echo "YARN_VERSION={data['yarn_mappings']}" >> $GITHUB_ENV
-            echo "FABRIC_API_VERSION={data['fabric_api']}" >> $GITHUB_ENV
-            echo "PAPER_VERSION={data['paper']}" >> $GITHUB_ENV
-            echo "DATA_VERSION={data['data_version']}" >> $GITHUB_ENV
-            ;;'''
+            case = f'          "{version}")\n            echo "YARN_VERSION={data["yarn_mappings"]}" >> $GITHUB_ENV\n            echo "FABRIC_API_VERSION={data["fabric_api"]}" >> $GITHUB_ENV\n            echo "PAPER_VERSION={data["paper"]}" >> $GITHUB_ENV\n            echo "DATA_VERSION={data["data_version"]}" >> $GITHUB_ENV\n            ;;'
             cases.append(case)
         
         cases_content = '\n'.join(cases)
@@ -180,38 +175,36 @@ jobs:
         latest_version = complete_versions[0]
         latest_data = versions_data[latest_version]
         
-        gradle_content = f"""# Done to increase the memory available to gradle.
-org.gradle.jvmargs=-Xmx4G
-
-# Fabric Properties (auto-updated)
-minecraft_version={latest_version}
-yarn_mappings={latest_data['yarn_mappings']}
-loader_version=0.16.9
-
-# Mod Properties
-mod_version=1.0.0-SNAPSHOT
-maven_group=site.chococar
-archives_base_name=chococars-inventory-bridge
-
-# Dependencies
-fabric_version={latest_data['fabric_api']}
-paper_version={latest_data['paper']}
-data_version={latest_data['data_version']}
-
-# CI/CD Properties
-ci_build=false"""
+        gradle_content = "# Done to increase the memory available to gradle.\\n"
+        gradle_content += "org.gradle.jvmargs=-Xmx4G\\n\\n"
+        gradle_content += "# Fabric Properties (auto-updated)\\n"
+        gradle_content += f"minecraft_version={latest_version}\\n"
+        gradle_content += f"yarn_mappings={latest_data['yarn_mappings']}\\n"
+        gradle_content += "loader_version=0.16.9\\n\\n"
+        gradle_content += "# Mod Properties\\n"
+        gradle_content += "mod_version=1.0.0-SNAPSHOT\\n"
+        gradle_content += "maven_group=site.chococar\\n"
+        gradle_content += "archives_base_name=chococars-inventory-bridge\\n\\n"
+        gradle_content += "# Dependencies\\n"
+        gradle_content += f"fabric_version={latest_data['fabric_api']}\\n"
+        gradle_content += f"paper_version={latest_data['paper']}\\n"
+        gradle_content += f"data_version={latest_data['data_version']}\\n\\n"
+        gradle_content += "# CI/CD Properties\\n"
+        gradle_content += "ci_build=false"
         
         with open('gradle.properties', 'w') as f:
             f.write(gradle_content)
         
         print("✅ 文件更新完成")
-        EOF
+        SCRIPT_EOF
+        
+        python update_workflows.py
         
     - name: Update version scripts
       run: |
         echo "🔄 更新版本腳本..."
         
-        python << 'EOF'
+        cat > update_scripts.py << 'SCRIPT_EOF'
         import json
         from datetime import datetime
         
@@ -225,88 +218,72 @@ ci_build=false"""
         cases = []
         for version in complete_versions:
             data = versions_data[version]
-            case = f'''  "{version}")
-    YARN_VERSION="{data['yarn_mappings']}"
-    FABRIC_API_VERSION="{data['fabric_api']}"
-    PAPER_VERSION="{data['paper']}"
-    DATA_VERSION="{data['data_version']}"
-    ;;'''
+            case = f'  "{version}")\n    YARN_VERSION="{data["yarn_mappings"]}"\n    FABRIC_API_VERSION="{data["fabric_api"]}"\n    PAPER_VERSION="{data["paper"]}"\n    DATA_VERSION="{data["data_version"]}"\n    ;;'
             cases.append(case)
         
         versions_str = ', '.join(complete_versions)
         cases_content = '\n'.join(cases)
         
-        shell_script = f'''#!/bin/bash
-
-# 自動生成的版本更新腳本 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-# 支援版本: {versions_str}
-
-set -e
-
-MC_VERSION=${{1:-"{complete_versions[-1]}"}}
-
-case "$MC_VERSION" in
-{cases_content}
-  *)
-    echo "❌ 不支援的版本: $MC_VERSION"
-    echo "支援的版本: {versions_str}"
-    exit 1
-    ;;
-esac
-
-echo "🔧 正在更新到 Minecraft $MC_VERSION..."
-
-# 更新 gradle.properties
-cat > gradle.properties << EOF
-# Done to increase the memory available to gradle.
-org.gradle.jvmargs=-Xmx4G
-
-# Fabric Properties
-minecraft_version=$MC_VERSION
-yarn_mappings=$YARN_VERSION
-loader_version=0.16.9
-
-# Mod Properties
-mod_version=1.0.0-SNAPSHOT
-maven_group=site.chococar
-archives_base_name=chococars-inventory-bridge
-
-# Dependencies
-fabric_version=$FABRIC_API_VERSION
-paper_version=$PAPER_VERSION
-data_version=$DATA_VERSION
-
-# CI/CD Properties
-ci_build=false
-EOF
-
-# 更新配置文件中的版本
-echo "📝 更新配置文件..."
-find . -name "*.yml" -type f -not -path "./.git/*" -exec sed -i.bak "s/minecraftVersion: \\".*\\"/minecraftVersion: \\"$MC_VERSION\\"/g" {{}} \\;
-
-# 清理備份文件
-find . -name "*.yml.bak" -delete
-
-# 更新常量文件中的數據版本
-echo "🔢 更新數據版本..."
-find . -name "*.java" -type f -exec sed -i.bak "s/CURRENT_DATA_VERSION = [0-9]*/CURRENT_DATA_VERSION = $DATA_VERSION/g" {{}} \\;
-find . -name "*.java.bak" -delete
-
-echo "✅ 版本更新完成！"
-echo "📋 當前配置："
-echo "   Minecraft: $MC_VERSION"
-echo "   Yarn: $YARN_VERSION"
-echo "   Fabric API: $FABRIC_API_VERSION"
-echo "   Paper: $PAPER_VERSION"
-echo "   Data Version: $DATA_VERSION"
-echo ""
-echo "🚀 現在可以運行 './gradlew build' 來構建專案"'''
+        shell_script = "#!/bin/bash\n\n"
+        shell_script += f"# 自動生成的版本更新腳本 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        shell_script += f"# 支援版本: {versions_str}\n\n"
+        shell_script += "set -e\n\n"
+        default_version = complete_versions[-1]
+        shell_script += 'MC_VERSION="${1:-' + default_version + '}"\n\n'
+        shell_script += "case \"$MC_VERSION\" in\n"
+        shell_script += cases_content + "\n"
+        shell_script += "  *)\n"
+        shell_script += "    echo \"❌ 不支援的版本: $MC_VERSION\"\n"
+        shell_script += f"    echo \"支援的版本: {versions_str}\"\n"
+        shell_script += "    exit 1\n"
+        shell_script += "    ;;\n"
+        shell_script += "esac\n\n"
+        shell_script += "echo \"🔧 正在更新到 Minecraft $MC_VERSION...\"\n\n"
+        shell_script += "# 更新 gradle.properties\n"
+        shell_script += "cat > gradle.properties << EOF\n"
+        shell_script += "# Done to increase the memory available to gradle.\n"
+        shell_script += "org.gradle.jvmargs=-Xmx4G\n\n"
+        shell_script += "# Fabric Properties\n"
+        shell_script += "minecraft_version=$MC_VERSION\n"
+        shell_script += "yarn_mappings=$YARN_VERSION\n"
+        shell_script += "loader_version=0.16.9\n\n"
+        shell_script += "# Mod Properties\n"
+        shell_script += "mod_version=1.0.0-SNAPSHOT\n"
+        shell_script += "maven_group=site.chococar\n"
+        shell_script += "archives_base_name=chococars-inventory-bridge\n\n"
+        shell_script += "# Dependencies\n"
+        shell_script += "fabric_version=$FABRIC_API_VERSION\n"
+        shell_script += "paper_version=$PAPER_VERSION\n"
+        shell_script += "data_version=$DATA_VERSION\n\n"
+        shell_script += "# CI/CD Properties\n"
+        shell_script += "ci_build=false\n"
+        shell_script += "EOF\n\n"
+        shell_script += "# 更新配置文件中的版本\n"
+        shell_script += "echo \"📝 更新配置文件...\"\n"
+        shell_script += "find . -name \"*.yml\" -type f -not -path \"./.git/*\" -exec sed -i.bak \"s/minecraftVersion: \\\".*\\\"/minecraftVersion: \\\"$MC_VERSION\\\"/g\" {} \\;\n\n"
+        shell_script += "# 清理備份文件\n"
+        shell_script += "find . -name \"*.yml.bak\" -delete\n\n"
+        shell_script += "# 更新常量文件中的數據版本\n"
+        shell_script += "echo \"🔢 更新數據版本...\"\n"
+        shell_script += "find . -name \"*.java\" -type f -exec sed -i.bak \"s/CURRENT_DATA_VERSION = [0-9]*/CURRENT_DATA_VERSION = $DATA_VERSION/g\" {} \\;\n"
+        shell_script += "find . -name \"*.java.bak\" -delete\n\n"
+        shell_script += "echo \"✅ 版本更新完成！\"\n"
+        shell_script += "echo \"📋 當前配置：\"\n"
+        shell_script += "echo \"   Minecraft: $MC_VERSION\"\n"
+        shell_script += "echo \"   Yarn: $YARN_VERSION\"\n"
+        shell_script += "echo \"   Fabric API: $FABRIC_API_VERSION\"\n"
+        shell_script += "echo \"   Paper: $PAPER_VERSION\"\n"
+        shell_script += "echo \"   Data Version: $DATA_VERSION\"\n"
+        shell_script += "echo \"\"\n"
+        shell_script += "echo \"🚀 現在可以運行 './gradlew build' 來構建專案\""
         
         with open('scripts/update-version.sh', 'w') as f:
             f.write(shell_script)
         
         print("✅ 腳本更新完成")
-        EOF
+        SCRIPT_EOF
+        
+        python update_scripts.py
         
     - name: Commit changes
       run: |
@@ -409,3 +386,5 @@ echo "🚀 現在可以運行 './gradlew build' 來構建專案"'''
           echo "🚀 觸發測試構建..."
           # 這裡可以觸發實際的構建測試
         fi
+        
+        echo "✅ 測試完成"
