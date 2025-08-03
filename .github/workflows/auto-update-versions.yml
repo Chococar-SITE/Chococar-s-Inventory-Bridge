@@ -35,7 +35,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests
+        pip install -r requirements.txt
         
     - name: Check for new versions
       id: check
@@ -44,10 +44,24 @@ jobs:
         
         # 執行版本檢查腳本
         if [ -n "${{ github.event.inputs.target_versions }}" ]; then
-          python scripts/fetch-latest-versions.py --versions ${{ github.event.inputs.target_versions }} --output json > latest_versions.json
+          if ! python scripts/fetch-latest-versions.py --versions ${{ github.event.inputs.target_versions }} --output json > latest_versions.json; then
+            echo "❌ 版本檢查腳本執行失敗"
+            exit 1
+          fi
         else
-          python scripts/fetch-latest-versions.py --output json > latest_versions.json
+          if ! python scripts/fetch-latest-versions.py --output json > latest_versions.json; then
+            echo "❌ 版本檢查腳本執行失敗"
+            exit 1
+          fi
         fi
+        
+        # 檢查生成的 JSON 文件
+        if [ ! -f "latest_versions.json" ] || [ ! -s "latest_versions.json" ]; then
+          echo "❌ latest_versions.json 文件未生成或為空"
+          exit 1
+        fi
+        
+        echo "✅ 版本數據獲取成功"
         
         # 檢查是否有新版本
         python -c "
@@ -55,8 +69,19 @@ jobs:
         import re
         
         # 讀取最新版本數據
-        with open('latest_versions.json', 'r') as f:
-            latest_data = json.load(f)
+        try:
+            with open('latest_versions.json', 'r') as f:
+                content = f.read().strip()
+                if not content:
+                    print('❌ latest_versions.json 文件為空')
+                    exit(1)
+                latest_data = json.loads(content)
+        except FileNotFoundError:
+            print('❌ latest_versions.json 文件不存在')
+            exit(1)
+        except json.JSONDecodeError as e:
+            print(f'❌ JSON 解析錯誤: {e}')
+            exit(1)
         
         # 讀取當前 build.yml 中的版本
         with open('.github/workflows/build.yml', 'r') as f:
@@ -113,7 +138,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests
+        pip install -r requirements.txt
         
     - name: Download version data
       uses: actions/download-artifact@v4
@@ -129,8 +154,19 @@ jobs:
         import re
         
         # 讀取版本數據
-        with open('latest_versions.json', 'r') as f:
-            versions_data = json.load(f)
+        try:
+            with open('latest_versions.json', 'r') as f:
+                content = f.read().strip()
+                if not content:
+                    print('❌ latest_versions.json 文件為空')
+                    exit(1)
+                versions_data = json.loads(content)
+        except FileNotFoundError:
+            print('❌ latest_versions.json 文件不存在')
+            exit(1)
+        except json.JSONDecodeError as e:
+            print(f'❌ JSON 解析錯誤: {e}')
+            exit(1)
         
         # 生成新的版本矩陣
         complete_versions = [v for v, data in versions_data.items() if data['status'] == 'complete']
@@ -195,6 +231,79 @@ jobs:
         with open('gradle.properties', 'w') as f:
             f.write(gradle_content)
         
+        # 更新 README.md
+        print("📝 更新 README.md...")
+        try:
+            with open('README.md', 'r', encoding='utf-8') as f:
+                readme_content = f.read()
+            
+            # 更新支援的版本列表
+            versions_list = ', '.join([f'1.21.{i}' for i in sorted([int(v.split('.')[2]) for v in complete_versions])])
+            version_range = f"1.21.{min([int(v.split('.')[2]) for v in complete_versions])} - 1.21.{max([int(v.split('.')[2]) for v in complete_versions])}"
+            
+            # 更新主要版本信息
+            latest_mc = complete_versions[0]
+            latest_fabric_api = latest_data['fabric_api']
+            latest_paper = latest_data['paper']
+            
+            # 替換版本相關內容
+            import re
+            
+            # 更新版本兼容性行
+            readme_content = re.sub(
+                r'完全支援 Minecraft 1\.21\.X 版本（.*?）',
+                f'完全支援 Minecraft 1.21.X 版本（{version_range}）',
+                readme_content
+            )
+            
+            # 更新當前支援版本
+            readme_content = re.sub(
+                r'- \*\*Minecraft 1\.21\.\d+\*\*（完整支援）',
+                f'- **Minecraft {latest_mc}**（完整支援）',
+                readme_content
+            )
+            
+            # 更新系統需求中的版本
+            readme_content = re.sub(
+                r'- Fabric API 0\.\d+\.\d+\+',
+                f'- Fabric API {latest_fabric_api}+',
+                readme_content
+            )
+            
+            readme_content = re.sub(
+                r'- Minecraft 1\.21\.\d+',
+                f'- Minecraft {latest_mc}',
+                readme_content
+            )
+            
+            readme_content = re.sub(
+                r'- Paper 1\.21\.\d+\+',
+                f'- Paper {latest_paper}+',
+                readme_content
+            )
+            
+            # 添加更新時間戳
+            from datetime import datetime
+            update_time = datetime.now().strftime('%Y-%m-%d')
+            
+            # 如果沒有更新時間戳部分，在文件末尾添加
+            if '<!-- Auto-updated -->' not in readme_content:
+                readme_content += f'\\n\\n<!-- Auto-updated by GitHub Actions on {update_time} -->'
+            else:
+                readme_content = re.sub(
+                    r'<!-- Auto-updated by GitHub Actions on .*? -->',
+                    f'<!-- Auto-updated by GitHub Actions on {update_time} -->',
+                    readme_content
+                )
+            
+            with open('README.md', 'w', encoding='utf-8') as f:
+                f.write(readme_content)
+            
+            print(f"✅ README.md 已更新（支援版本：{versions_list}）")
+            
+        except Exception as e:
+            print(f"⚠️ README.md 更新失敗：{e}")
+        
         print("✅ 文件更新完成")
         SCRIPT_EOF
         
@@ -208,8 +317,19 @@ jobs:
         import json
         from datetime import datetime
         
-        with open('latest_versions.json', 'r') as f:
-            versions_data = json.load(f)
+        try:
+            with open('latest_versions.json', 'r') as f:
+                content = f.read().strip()
+                if not content:
+                    print('❌ latest_versions.json 文件為空')
+                    exit(1)
+                versions_data = json.loads(content)
+        except FileNotFoundError:
+            print('❌ latest_versions.json 文件不存在')
+            exit(1)
+        except json.JSONDecodeError as e:
+            print(f'❌ JSON 解析錯誤: {e}')
+            exit(1)
         
         complete_versions = [v for v, data in versions_data.items() if data['status'] == 'complete']
         complete_versions.sort(key=lambda x: [int(i) for i in x.split('.')])
@@ -304,12 +424,16 @@ jobs:
           - 更新 GitHub Actions 工作流程
           - 更新 gradle.properties
           - 更新版本腳本
+          - 更新 README.md 版本資訊
           
           由 GitHub Actions 自動生成"
           
           git push
           
           echo "✅ 版本更新已提交"
+          
+          # 觸發構建工作流程來驗證新版本
+          echo "🚀 觸發構建工作流程..."
         fi
         
     - name: Create issue for new versions
@@ -329,6 +453,7 @@ jobs:
           - ✅ 更新 GitHub Actions 工作流程版本矩陣
           - ✅ 更新 gradle.properties 預設版本
           - ✅ 更新版本切換腳本
+          - ✅ 更新 README.md 版本資訊
 
           ### 需要手動檢查
           - [ ] 驗證新版本的依賴可用性
@@ -388,3 +513,27 @@ jobs:
         fi
         
         echo "✅ 測試完成"
+
+  trigger-build:
+    needs: [check-versions, update-workflows, test-build]
+    if: needs.check-versions.outputs.has_updates == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Trigger build workflow
+      uses: actions/github-script@v7
+      with:
+        script: |
+          console.log('🚀 觸發構建工作流程以驗證新版本...');
+          
+          await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'build.yml',
+            ref: 'main',
+            inputs: {
+              release_type: 'snapshot'
+            }
+          });
+          
+          console.log('✅ 構建工作流程已觸發');

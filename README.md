@@ -205,14 +205,6 @@ chococars-inventory-bridge/
 └── settings.gradle  # 項目設定
 ```
 
-## 貢獻
-
-1. Fork 此儲存庫
-2. 創建功能分支
-3. 進行變更
-4. 如適用，添加測試
-5. 提交 Pull Request
-
 ## 授權
 
 此項目使用 MIT 授權 - 詳見 [LICENSE](LICENSE) 文件。
