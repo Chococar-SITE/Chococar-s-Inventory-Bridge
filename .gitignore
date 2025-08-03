@@ -8,10 +8,6 @@ gradle-app.setting
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-# Gradle Wrapper (keep these files)
-!gradle/wrapper/gradle-wrapper.jar
-!gradle/wrapper/gradle-wrapper.properties
-
 # IntelliJ IDEA
 .idea/
 *.iws
@@ -56,7 +52,6 @@ Desktop.ini
 *.log
 *.ctxt
 .mtj.tmp/
-*.jar
 *.war
 *.nar
 *.ear
