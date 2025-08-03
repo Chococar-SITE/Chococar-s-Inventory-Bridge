@@ -1,0 +1,120 @@
+name: Quick Version Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      check_type:
+        description: '檢查類型'
+        required: true
+        default: 'current'
+        type: choice
+        options:
+        - current
+        - latest
+        - specific
+      specific_versions:
+        description: '指定版本 (用空格分隔，僅當檢查類型為 specific 時)'
+        required: false
+        type: string
+
+jobs:
+  quick-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Check current versions in workflow
+      if: github.event.inputs.check_type == 'current'
+      run: |
+        echo "📋 當前工作流程支援的版本:"
+        grep -E '"1\.21\.\d+"' .github/workflows/build.yml | sed 's/.*"\(1\.21\.[0-9]*\)".*/\1/' | sort -V
+        
+        echo -e "\n📋 當前 gradle.properties 版本:"
+        grep "minecraft_version" gradle.properties
+        grep "yarn_mappings" gradle.properties
+        grep "fabric_version" gradle.properties
+        grep "paper_version" gradle.properties
+        grep "data_version" gradle.properties
+        
+    - name: Check latest available versions
+      if: github.event.inputs.check_type == 'latest'
+      run: |
+        echo "🔍 檢查最新可用版本..."
+        node scripts/check-versions.js --json
+        
+    - name: Check specific versions
+      if: github.event.inputs.check_type == 'specific'
+      run: |
+        if [ -z "${{ github.event.inputs.specific_versions }}" ]; then
+          echo "❌ 請指定要檢查的版本"
+          exit 1
+        fi
+        
+        echo "🔍 檢查指定版本: ${{ github.event.inputs.specific_versions }}"
+        node scripts/check-versions.js ${{ github.event.inputs.specific_versions }} --json
+        
+    - name: Generate comparison report
+      if: github.event.inputs.check_type == 'latest'
+      run: |
+        echo "📊 生成比較報告..."
+        
+        # 獲取當前版本
+        current_versions=$(grep -E '"1\.21\.\d+"' .github/workflows/build.yml | sed 's/.*"\(1\.21\.[0-9]*\)".*/\1/' | sort -V | tr '\n' ' ')
+        
+        # 獲取最新版本
+        node scripts/check-versions.js --json > latest.json
+        latest_versions=$(node -e "
+          const data = JSON.parse(require('fs').readFileSync('latest.json', 'utf8'));
+          const complete = Object.keys(data).filter(v => data[v].status === 'complete').sort();
+          console.log(complete.join(' '));
+        ")
+        
+        echo "📋 版本比較:"
+        echo "當前支援: $current_versions"
+        echo "最新可用: $latest_versions"
+        
+        # 檢查差異
+        node -e "
+          const current = '$current_versions'.trim().split(' ').filter(v => v);
+          const latest = '$latest_versions'.trim().split(' ').filter(v => v);
+          
+          const missing = latest.filter(v => !current.includes(v));
+          const deprecated = current.filter(v => !latest.includes(v));
+          
+          console.log('\\n🆕 新版本:', missing.length > 0 ? missing.join(', ') : '無');
+          console.log('⚠️ 可能已過時:', deprecated.length > 0 ? deprecated.join(', ') : '無');
+          
+          if (missing.length > 0) {
+            console.log('\\n💡 建議執行自動更新工作流程');
+          }
+        "
+        
+    - name: Create summary
+      run: |
+        echo "## 🔍 版本檢查摘要" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**檢查類型:** ${{ github.event.inputs.check_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "**檢查時間:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ github.event.inputs.check_type }}" == "current" ]; then
+          echo "### 當前配置" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          grep -E '"1\.21\.\d+"' .github/workflows/build.yml | sed 's/.*"\(1\.21\.[0-9]*\)".*/\1/' | sort -V >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 相關連結" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- [自動更新工作流程](https://github.com/${{ github.repository }}/actions/workflows/auto-update-versions.yml)" >> $GITHUB_STEP_SUMMARY
+        echo "- [構建工作流程](https://github.com/${{ github.repository }}/actions/workflows/build.yml)" >> $GITHUB_STEP_SUMMARY
+        echo "- [版本腳本](https://github.com/${{ github.repository }}/blob/main/scripts/)" >> $GITHUB_STEP_SUMMARY

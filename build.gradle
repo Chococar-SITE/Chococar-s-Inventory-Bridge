@@ -1,0 +1,36 @@
+plugins {
+    id 'java'
+}
+
+allprojects {
+    group = project.maven_group
+    version = project.mod_version
+    
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+        maven { url = 'https://oss.sonatype.org/content/groups/public/' }
+    }
+}
+
+subprojects {
+    apply plugin: 'java'
+    
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(21)
+    }
+    
+    tasks.withType(JavaCompile).configureEach {
+        it.options.encoding = "UTF-8"
+        it.options.release = 21
+    }
+    
+    dependencies {
+        // 共通依賴
+        implementation 'mysql:mysql-connector-java:8.0.33'
+        implementation 'com.google.code.gson:gson:2.10.1'
+        implementation 'com.zaxxer:HikariCP:5.0.1'
+        implementation 'org.yaml:snakeyaml:2.0'
+    }
+}

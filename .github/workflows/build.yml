@@ -1,0 +1,260 @@
+name: Build Multi-Version JAR Files
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: false
+        default: 'snapshot'
+        type: choice
+        options:
+        - snapshot
+        - release
+
+jobs:
+  build-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        minecraft_version: 
+          - "1.21.4"
+          - "1.21.5" 
+          - "1.21.6"
+          - "1.21.7"
+          - "1.21.8"
+        platform:
+          - fabric
+          - paper
+    
+    name: Build ${{ matrix.platform }} for MC ${{ matrix.minecraft_version }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Validate Gradle wrapper
+      uses: gradle/wrapper-validation-action@v2
+      
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v3
+      with:
+        gradle-home-cache-cleanup: true
+        
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+      
+    - name: Set version variables
+      id: version
+      run: |
+        MC_VERSION="${{ matrix.minecraft_version }}"
+        echo "MC_VERSION=$MC_VERSION" >> $GITHUB_ENV
+        
+        # 設定對應的依賴版本
+        case "$MC_VERSION" in
+          "1.21.4")
+            echo "YARN_VERSION=1.21.4+build.1" >> $GITHUB_ENV
+            echo "FABRIC_API_VERSION=0.108.0+1.21.4" >> $GITHUB_ENV
+            echo "PAPER_VERSION=1.21.4-R0.1-SNAPSHOT" >> $GITHUB_ENV
+            echo "DATA_VERSION=4080" >> $GITHUB_ENV
+            ;;
+          "1.21.5")
+            echo "YARN_VERSION=1.21.5+build.1" >> $GITHUB_ENV
+            echo "FABRIC_API_VERSION=0.109.0+1.21.5" >> $GITHUB_ENV
+            echo "PAPER_VERSION=1.21.5-R0.1-SNAPSHOT" >> $GITHUB_ENV
+            echo "DATA_VERSION=4081" >> $GITHUB_ENV
+            ;;
+          "1.21.6")
+            echo "YARN_VERSION=1.21.6+build.1" >> $GITHUB_ENV
+            echo "FABRIC_API_VERSION=0.109.5+1.21.6" >> $GITHUB_ENV
+            echo "PAPER_VERSION=1.21.6-R0.1-SNAPSHOT" >> $GITHUB_ENV
+            echo "DATA_VERSION=4081" >> $GITHUB_ENV
+            ;;
+          "1.21.7")
+            echo "YARN_VERSION=1.21.7+build.1" >> $GITHUB_ENV
+            echo "FABRIC_API_VERSION=0.110.0+1.21.7" >> $GITHUB_ENV
+            echo "PAPER_VERSION=1.21.7-R0.1-SNAPSHOT" >> $GITHUB_ENV
+            echo "DATA_VERSION=4081" >> $GITHUB_ENV
+            ;;
+          "1.21.8")
+            echo "YARN_VERSION=1.21.8+build.1" >> $GITHUB_ENV
+            echo "FABRIC_API_VERSION=0.110.5+1.21.8" >> $GITHUB_ENV
+            echo "PAPER_VERSION=1.21.8-R0.1-SNAPSHOT" >> $GITHUB_ENV
+            echo "DATA_VERSION=4082" >> $GITHUB_ENV
+            ;;
+        esac
+        
+        # 設定版本號
+        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/v}
+        else
+          VERSION="1.0.0-SNAPSHOT+mc$MC_VERSION"
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "ARTIFACT_NAME=chococars-inventory-bridge-${{ matrix.platform }}-$MC_VERSION-$VERSION" >> $GITHUB_ENV
+        
+    - name: Update version configurations
+      run: |
+        # 更新 gradle.properties
+        cat > gradle.properties << EOF
+        org.gradle.jvmargs=-Xmx4G
+        minecraft_version=$MC_VERSION
+        yarn_mappings=$YARN_VERSION
+        loader_version=0.16.9
+        mod_version=$VERSION
+        maven_group=site.chococar
+        archives_base_name=chococars-inventory-bridge
+        fabric_version=$FABRIC_API_VERSION
+        paper_version=$PAPER_VERSION
+        data_version=$DATA_VERSION
+        EOF
+        
+        # 更新配置文件中的版本
+        find . -name "*.yml" -type f -exec sed -i "s/minecraftVersion: \"1.21.8\"/minecraftVersion: \"$MC_VERSION\"/g" {} \;
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ matrix.minecraft_version }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-${{ matrix.minecraft_version }}-
+          ${{ runner.os }}-gradle-
+          
+    - name: Build common module
+      run: ./gradlew :common:build --no-daemon
+      
+    - name: Build Fabric mod
+      if: matrix.platform == 'fabric'
+      run: |
+        # 更新 Fabric 特定版本
+        sed -i "s/minecraft \"com.mojang:minecraft:.*\"/minecraft \"com.mojang:minecraft:$MC_VERSION\"/g" fabric/build.gradle
+        sed -i "s/mappings \"net.fabricmc:yarn:.*\"/mappings \"net.fabricmc:yarn:$YARN_VERSION:v2\"/g" fabric/build.gradle
+        sed -i "s/modImplementation \"net.fabricmc.fabric-api:fabric-api:.*\"/modImplementation \"net.fabricmc.fabric-api:fabric-api:$FABRIC_API_VERSION\"/g" fabric/build.gradle
+        
+        ./gradlew :fabric:build --no-daemon
+        
+    - name: Build Paper plugin
+      if: matrix.platform == 'paper'
+      run: |
+        # 更新 Paper 特定版本
+        sed -i "s/paperweight.paperDevBundle(\".*\")/paperweight.paperDevBundle(\"$PAPER_VERSION\")/g" paper/build.gradle
+        
+        ./gradlew :paper:build --no-daemon
+        
+    - name: Rename artifacts
+      run: |
+        if [ "${{ matrix.platform }}" == "fabric" ]; then
+          BUILD_DIR="fabric/build/libs"
+          ORIGINAL_JAR=$(find $BUILD_DIR -name "*.jar" ! -name "*-dev.jar" ! -name "*-sources.jar" | head -n 1)
+        else
+          BUILD_DIR="paper/build/libs"
+          ORIGINAL_JAR=$(find $BUILD_DIR -name "*.jar" ! -name "*-dev.jar" ! -name "*-sources.jar" | head -n 1)
+        fi
+        
+        if [ -f "$ORIGINAL_JAR" ]; then
+          mv "$ORIGINAL_JAR" "$BUILD_DIR/$ARTIFACT_NAME.jar"
+          echo "Renamed to: $ARTIFACT_NAME.jar"
+        fi
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}
+        path: |
+          ${{ matrix.platform }}/build/libs/${{ env.ARTIFACT_NAME }}.jar
+        retention-days: 30
+        
+    - name: Test JAR file
+      run: |
+        BUILD_DIR="${{ matrix.platform }}/build/libs"
+        JAR_FILE="$BUILD_DIR/$ARTIFACT_NAME.jar"
+        
+        if [ -f "$JAR_FILE" ]; then
+          echo "✅ JAR file created successfully: $JAR_FILE"
+          echo "📦 File size: $(du -h "$JAR_FILE" | cut -f1)"
+          
+          # 檢查 JAR 內容
+          if [ "${{ matrix.platform }}" == "fabric" ]; then
+            echo "🔍 Checking Fabric mod.json..."
+            unzip -l "$JAR_FILE" | grep -E "(fabric.mod.json|mixins.json)" || echo "⚠️ Missing Fabric metadata"
+          else
+            echo "🔍 Checking Paper plugin.yml..."
+            unzip -l "$JAR_FILE" | grep "paper-plugin.yml" || echo "⚠️ Missing Paper plugin.yml"
+          fi
+        else
+          echo "❌ JAR file not found: $JAR_FILE"
+          exit 1
+        fi
+
+  create-release:
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_type == 'release'
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts/
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/v')
+      with:
+        files: artifacts/**/*.jar
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## Chococar's Inventory Bridge Release
+          
+          這個版本包含對 Minecraft 1.21.4 到 1.21.8 的完整支援。
+          
+          ### 支援的版本
+          - Minecraft 1.21.4, 1.21.5, 1.21.6, 1.21.7, 1.21.8
+          - Java 21+
+          
+          ### 平台支援
+          - ✅ Fabric 模組
+          - ✅ Paper 插件
+          
+          ### 安裝說明
+          1. 選擇對應您的 Minecraft 版本和平台的 JAR 文件
+          2. 將 JAR 文件放入對應的 `mods/` 或 `plugins/` 資料夾
+          3. 配置 MySQL 資料庫連接
+          4. 重啟伺服器
+          
+          ### 文件下載說明
+          - `*-fabric-*.jar` - Fabric 模組文件
+          - `*-paper-*.jar` - Paper 插件文件
+          - 文件名包含對應的 Minecraft 版本號
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup:
+    needs: [build-matrix, create-release]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Clean up
+      run: |
+        echo "🧹 構建完成，清理工作空間"
+        echo "📊 構建摘要："
+        echo "   - 支援版本: 1.21.4, 1.21.5, 1.21.6, 1.21.7, 1.21.8"
+        echo "   - 平台: Fabric + Paper"
+        echo "   - 總計 JAR 文件: 10 個"

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "chococars_inventory_bridge",
+  "version": "${version}",
+  "name": "Chococar's Inventory Bridge",
+  "description": "跨伺服器背包同步模組，支持 MySQL 資料庫存儲和版本兼容性",
+  "authors": [
+    "chococar.site"
+  ],
+  "contact": {
+    "homepage": "https://chococar.site",
+    "sources": "https://github.com/chococar-site/inventory-bridge"
+  },
+  "license": "MIT",
+  "icon": "assets/chococars_inventory_bridge/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "site.chococar.inventorybridge.fabric.ChococarsInventoryBridgeFabric"
+    ],
+    "client": [
+      "site.chococar.inventorybridge.fabric.client.ChococarsInventoryBridgeClient"
+    ]
+  },
+  "mixins": [
+    "chococars_inventory_bridge.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "custom": {
+    "modmenu": {
+      "badges": ["library"],
+      "description": "跨伺服器背包同步模組"
+    }
+  }
+}

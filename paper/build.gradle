@@ -1,0 +1,71 @@
+plugins {
+    id 'java'
+    id 'io.papermc.paperweight.userdev' version '2.0.0-beta.18'
+    id 'xyz.jpenilla.run-paper' version '2.3.0'
+    id 'maven-publish'
+}
+
+version = project.version
+group = project.group
+description = 'Chococar\'s Inventory Bridge Paper Plugin'
+
+base {
+    archivesName = "chococars-inventory-bridge-paper"
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+}
+
+dependencies {
+    
+    paperweight.paperDevBundle("1.21.4-R0.1-SNAPSHOT")
+
+    // 共通模組
+    implementation project(':common')
+    
+    // MySQL connector
+    implementation 'mysql:mysql-connector-java:8.0.33'
+    
+    // JSON handling
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Connection pooling
+    implementation 'com.zaxxer:HikariCP:5.0.1'
+}
+
+tasks {
+    compileJava {
+        options.release = 21
+    }
+    
+    javadoc {
+        options.encoding = 'UTF-8'
+    }
+    
+    processResources {
+        filteringCharset = 'UTF-8'
+        def props = [
+            version    : project.version,
+            description: project.description,
+            apiVersion : "1.21.4"
+        ]
+        inputs.properties(props)
+        filesMatching("paper-plugin.yml") {
+            expand(props)
+        }
+    }
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from(components.java)
+        }
+    }
+}

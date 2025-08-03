@@ -1,0 +1,25 @@
+name: ChococarsInventoryBridge
+version: '${version}'
+description: '${description}'
+main: site.chococar.inventorybridge.paper.ChococarsInventoryBridgePlugin
+api-version: '${apiVersion}'
+authors: [ chococar.site ]
+website: https://chococar.site
+
+permissions:
+  chococars.inventorybridge.admin:
+    description: Full access to Inventory Bridge commands
+    default: op
+  chococars.inventorybridge.reload:
+    description: Reload the plugin configuration
+    default: op
+  chococars.inventorybridge.sync:
+    description: Manually sync inventory
+    default: true
+
+commands:
+  inventorybridge:
+    description: Main command for Inventory Bridge
+    usage: /inventorybridge <subcommand>
+    aliases: [ib, invbridge]
+    permission: chococars.inventorybridge.admin

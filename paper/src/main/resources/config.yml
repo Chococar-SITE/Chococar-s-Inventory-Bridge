@@ -1,0 +1,64 @@
+# Chococar's Inventory Bridge Configuration
+# MySQL Database Configuration
+database:
+  host: "localhost"
+  port: 3306
+  database: "inventory_bridge"
+  username: "minecraft"
+  password: "password"
+  tablePrefix: "ib_"
+  maxPoolSize: 10
+  connectionTimeout: 30000
+  useSSL: false
+
+# Synchronization Settings
+sync:
+  # Enable automatic synchronization
+  enableAutoSync: true
+  
+  # Sync interval in ticks (20 ticks = 1 second)
+  syncIntervalTicks: 200
+  
+  # Sync player inventory when joining the server
+  syncOnJoin: true
+  
+  # Sync player inventory when leaving the server
+  syncOnLeave: true
+  
+  # Sync ender chest contents
+  syncEnderChest: true
+  
+  # Sync player experience
+  syncExperience: true
+  
+  # Sync player health (not recommended for PvP servers)
+  syncHealth: false
+  
+  # Sync player hunger
+  syncHunger: false
+  
+  # Unique server identifier for multi-server setups
+  serverId: "server1"
+
+# Version Compatibility Settings
+compatibility:
+  # Enable support for older Minecraft versions
+  enableLegacySupport: true
+  
+  # Convert old items to new format when possible
+  convertOldItems: true
+  
+  # Preserve custom model data when syncing
+  preserveCustomModelData: true
+  
+  # Handle bundle items (1.21.2+)
+  handleBundles: true
+  
+  # Handle copper oxidation states
+  handleCopperOxidation: true
+  
+  # Handle resin items (1.21.4+)
+  handleResinItems: true
+  
+  # Current Minecraft version
+  minecraftVersion: "1.21.8"

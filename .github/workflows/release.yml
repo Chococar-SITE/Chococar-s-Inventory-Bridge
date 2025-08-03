@@ -1,0 +1,70 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Validate version format
+      run: |
+        VERSION="${{ github.event.inputs.version }}"
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+          echo "❌ Invalid version format: $VERSION"
+          echo "Expected format: X.Y.Z or X.Y.Z-suffix"
+          exit 1
+        fi
+        echo "✅ Version format is valid: $VERSION"
+        
+    - name: Create and push tag
+      run: |
+        VERSION="${{ github.event.inputs.version }}"
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        # 檢查標籤是否已存在
+        if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+          echo "❌ Tag v$VERSION already exists"
+          exit 1
+        fi
+        
+        # 創建標籤
+        git tag -a "v$VERSION" -m "Release version $VERSION"
+        git push origin "v$VERSION"
+        echo "✅ Created and pushed tag: v$VERSION"
+        
+    - name: Trigger build workflow
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const response = await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'build.yml',
+            ref: 'v${{ github.event.inputs.version }}',
+            inputs: {
+              release_type: 'release'
+            }
+          });
+          console.log('✅ Triggered build workflow for release');
+          
+    - name: Wait for build completion
+      run: |
+        echo "⏳ 等待構建工作流程完成..."
+        echo "📋 可在 Actions 頁面查看構建進度"
+        echo "🚀 構建完成後將自動創建 GitHub Release"

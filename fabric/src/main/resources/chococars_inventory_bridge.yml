@@ -1,0 +1,70 @@
+# Chococar's Inventory Bridge - Fabric 模組配置
+# MySQL 資料庫配置
+database:
+  host: "localhost"
+  port: 3306
+  database: "inventory_bridge"
+  username: "minecraft"
+  password: "password"
+  tablePrefix: "ib_"
+  maxPoolSize: 10
+  connectionTimeout: 30000
+  useSSL: false
+
+# 同步設定
+sync:
+  # 啟用自動同步
+  enableAutoSync: true
+  
+  # 同步間隔（tick為單位，20 tick = 1 秒）
+  syncIntervalTicks: 200
+  
+  # 玩家加入伺服器時同步背包
+  syncOnJoin: true
+  
+  # 玩家離開伺服器時同步背包
+  syncOnLeave: true
+  
+  # 同步終界箱內容
+  syncEnderChest: true
+  
+  # 同步玩家經驗
+  syncExperience: true
+  
+  # 同步玩家生命值（不建議在 PvP 伺服器使用）
+  syncHealth: false
+  
+  # 同步玩家飢餓值
+  syncHunger: false
+  
+  # 多伺服器設置的唯一伺服器識別符
+  serverId: "server1"
+
+# 版本兼容性設定
+compatibility:
+  # 啟用對舊版 Minecraft 的支援
+  enableLegacySupport: true
+  
+  # 在可能的情況下將舊物品轉換為新格式
+  convertOldItems: true
+  
+  # 同步時保留自定義模型數據
+  preserveCustomModelData: true
+  
+  # 處理束包物品（1.21.2+）
+  handleBundles: true
+  
+  # 處理銅製品氧化狀態
+  handleCopperOxidation: true
+  
+  # 處理樹脂物品（1.21.4+）
+  handleResinItems: true
+  
+  # 處理惡魂相關物品（1.21.6+）
+  handleGhastItems: true
+  
+  # 處理新音樂唱片（1.21.6+、1.21.7+）
+  handleNewMusicDiscs: true
+  
+  # 當前 Minecraft 版本
+  minecraftVersion: "1.21.8"
