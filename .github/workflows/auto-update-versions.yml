@@ -124,12 +124,28 @@ jobs:
         
         has_updates = len(new_versions) > 0 or len(api_updates) > 0 or '${{ github.event.inputs.force_update }}' == 'true'
         
+        # 調試輸出
+        print(f'🔍 調試信息:')
+        print(f'   新遊戲版本數量: {len(new_versions)}')
+        print(f'   API更新數量: {len(api_updates)}')
+        print(f'   強制更新: ${{ github.event.inputs.force_update }}')
+        print(f'   has_updates (布林值): {has_updates}')
+        print(f'   has_updates (字符串): {str(has_updates).lower()}')
+        
         # 輸出結果
         all_updates = sorted(new_versions) + [f"{v}(API)" for v in sorted(api_updates)]
         
-        with open('$GITHUB_OUTPUT', 'a') as f:
-            f.write(f'has_updates={str(has_updates).lower()}\n')
-            f.write(f'new_versions={" ".join(all_updates)}\n')
+        # 確保 GITHUB_OUTPUT 變數存在
+        import os
+        github_output = os.environ.get('GITHUB_OUTPUT')
+        if github_output:
+            with open(github_output, 'a') as f:
+                f.write(f'has_updates={str(has_updates).lower()}\n')
+                f.write(f'new_versions={" ".join(all_updates)}\n')
+            print(f'📤 已寫入 GITHUB_OUTPUT: has_updates={str(has_updates).lower()}')
+            print(f'📤 已寫入 GITHUB_OUTPUT: new_versions={" ".join(all_updates)}')
+        else:
+            print('⚠️ GITHUB_OUTPUT 環境變數未設置')
         
         print(f'有更新: {has_updates}')
         if new_versions:
@@ -138,6 +154,13 @@ jobs:
             print(f'API版本更新: {", ".join(sorted(api_updates))}')
         SCRIPT_EOF
         python check_versions.py
+        
+        # 調試輸出
+        echo "🔍 調試信息："
+        echo "   has_updates 值: $(cat $GITHUB_OUTPUT | grep has_updates || echo '未找到')"
+        echo "   new_versions 值: $(cat $GITHUB_OUTPUT | grep new_versions || echo '未找到')"
+        echo "   GITHUB_OUTPUT 文件內容:"
+        cat $GITHUB_OUTPUT || echo "無法讀取 GITHUB_OUTPUT 文件"
         
     - name: Upload version data
       if: steps.check.outputs.has_updates == 'true'
@@ -153,6 +176,12 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Debug outputs
+      run: |
+        echo "🔍 update-workflows job 已觸發"
+        echo "   has_updates: ${{ needs.check-versions.outputs.has_updates }}"
+        echo "   new_versions: ${{ needs.check-versions.outputs.new_versions }}"
+        
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
