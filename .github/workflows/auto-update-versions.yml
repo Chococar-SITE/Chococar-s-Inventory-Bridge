@@ -1,9 +1,7 @@
-name: Auto Update Versions (Simple)
-
+name: Auto Update Versions
 permissions:
   contents: write
   pull-requests: write
-  issues: write
 
 on:
   schedule:
@@ -29,6 +27,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
+        token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
       
     - name: Set up Python
