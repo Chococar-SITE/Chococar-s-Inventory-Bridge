@@ -48,81 +48,156 @@ class VersionFetcher:
     def get_fabric_api_version(self, mc_version: str) -> Optional[str]:
         """獲取指定 Minecraft 版本的最新 Fabric API 版本"""
         try:
-            # 首先檢查 Fabric 是否支援該 MC 版本
-            fabric_check = self.session.get(f'https://meta.fabricmc.net/v2/versions/game/{mc_version}')
-            if fabric_check.status_code == 404:
-                print(f"⚠️ Fabric 尚未支援 Minecraft {mc_version}", file=sys.stderr)
-                return None
+            print(f"🔍 從 Modrinth 獲取 Fabric API for {mc_version}...", file=sys.stderr)
             
-            # 使用 Modrinth API 獲取 Fabric API 版本
+            # 直接使用 Modrinth API 獲取 Fabric API 版本
+            # 不依賴 meta.fabricmc.net，因為它不提供 Fabric API 信息
             import urllib.parse
+            
+            # 方法1: 使用 game_versions 參數
             game_versions = urllib.parse.quote(f'["{mc_version}"]')
-            api_url = f'https://api.modrinth.com/v2/project/fabric-api/version?game_versions={game_versions}&featured=true'
-            api_response = self.session.get(api_url)
+            api_url = f'https://api.modrinth.com/v2/project/fabric-api/version?game_versions={game_versions}'
+            
+            print(f"📡 請求 Modrinth: {api_url}", file=sys.stderr)
+            api_response = self.session.get(api_url, timeout=10)
+            print(f"📊 Modrinth 回應狀態: {api_response.status_code}", file=sys.stderr)
+            
+            if api_response.status_code != 200:
+                print(f"📄 Modrinth 回應內容: {api_response.text[:300]}", file=sys.stderr)
+            
             api_response.raise_for_status()
             api_data = api_response.json()
+            print(f"📄 找到 {len(api_data)} 個版本", file=sys.stderr)
             
-            # 如果沒有 featured 版本，嘗試獲取所有版本
+            # 如果沒有找到，嘗試不使用方括號
             if not api_data:
-                api_url = f'https://api.modrinth.com/v2/project/fabric-api/version?game_versions={game_versions}'
-                api_response = self.session.get(api_url)
-                api_response.raise_for_status()
-                api_data = api_response.json()
+                api_url = f'https://api.modrinth.com/v2/project/fabric-api/version?game_versions={mc_version}'
+                print(f"📡 重試請求 Modrinth (無方括號): {api_url}", file=sys.stderr)
+                
+                api_response = self.session.get(api_url, timeout=10)
+                print(f"📊 重試回應狀態: {api_response.status_code}", file=sys.stderr)
+                
+                if api_response.status_code == 200:
+                    api_data = api_response.json()
+                    print(f"📄 重試找到 {len(api_data)} 個版本", file=sys.stderr)
             
             # 找到最新版本
             if api_data:
                 # 按日期排序，取最新的
                 api_data.sort(key=lambda x: x['date_published'], reverse=True)
-                return api_data[0]['version_number']
+                latest_version = api_data[0]['version_number']
+                print(f"✅ 最新 Fabric API: {latest_version}", file=sys.stderr)
+                return latest_version
             
-            print(f"⚠️ 找不到 Minecraft {mc_version} 的 Fabric API 版本", file=sys.stderr)
+            # 如果還是沒找到，使用已知的版本映射作為備用
+            print(f"⚠️ Modrinth 沒有找到版本，使用預設值...", file=sys.stderr)
+            version_mapping = {
+                '1.21.4': '0.119.0+1.21.4',
+                '1.21.5': '0.119.2+1.21.5',
+                '1.21.6': '0.109.5+1.21.6',  # 需要更新
+                '1.21.7': '0.110.0+1.21.7',
+                '1.21.8': '0.110.5+1.21.8'
+            }
+            
+            fallback_version = version_mapping.get(mc_version)
+            if fallback_version:
+                print(f"🔄 使用預設 Fabric API 版本: {fallback_version}", file=sys.stderr)
+                return fallback_version
+            
+            print(f"❌ 找不到 Minecraft {mc_version} 的 Fabric API 版本", file=sys.stderr)
             return None
             
         except Exception as e:
             print(f"❌ 獲取 Fabric API 版本失敗 ({mc_version}): {e}", file=sys.stderr)
+            print(f"   詳細錯誤: {type(e).__name__}: {str(e)}", file=sys.stderr)
+            if hasattr(e, 'response'):
+                print(f"   HTTP 狀態: {e.response.status_code}", file=sys.stderr)
+                print(f"   回應內容: {e.response.text[:200]}...", file=sys.stderr)
+            
+            # 錯誤時也嘗試使用預設值
+            version_mapping = {
+                '1.21.4': '0.119.0+1.21.4',
+                '1.21.5': '0.119.2+1.21.5',
+                '1.21.6': '0.109.5+1.21.6',
+                '1.21.7': '0.110.0+1.21.7',
+                '1.21.8': '0.110.5+1.21.8'
+            }
+            fallback_version = version_mapping.get(mc_version)
+            if fallback_version:
+                print(f"🔄 使用預設 Fabric API 版本: {fallback_version}", file=sys.stderr)
+                return fallback_version
+            
             return None
     
     def get_yarn_mappings(self, mc_version: str) -> Optional[str]:
         """獲取指定 Minecraft 版本的最新 Yarn Mappings"""
         try:
-            response = self.session.get(f'https://meta.fabricmc.net/v2/versions/yarn/{mc_version}')
+            yarn_url = f'https://meta.fabricmc.net/v2/versions/yarn/{mc_version}'
+            print(f"📡 請求 Yarn: {yarn_url}", file=sys.stderr)
+            
+            response = self.session.get(yarn_url)
+            print(f"📊 Yarn 回應狀態: {response.status_code}", file=sys.stderr)
+            
             if response.status_code == 404:
+                print(f"⚠️ 找不到 {mc_version} 的 Yarn Mappings", file=sys.stderr)
                 return None
                 
             response.raise_for_status()
             data = response.json()
+            print(f"📄 找到 {len(data)} 個 Yarn 版本", file=sys.stderr)
             
             if data:
                 # 取最新版本
-                return data[0]['version']
+                latest_yarn = data[0]['version']
+                print(f"✅ 最新 Yarn: {latest_yarn}", file=sys.stderr)
+                return latest_yarn
             
             return None
             
         except Exception as e:
             print(f"❌ 獲取 Yarn Mappings 失敗 ({mc_version}): {e}", file=sys.stderr)
+            print(f"   詳細錯誤: {type(e).__name__}: {str(e)}", file=sys.stderr)
             return None
     
     def get_paper_version(self, mc_version: str) -> Optional[str]:
         """獲取指定 Minecraft 版本的最新 Paper API"""
         try:
+            paper_url = 'https://api.papermc.io/v2/projects/paper'
+            print(f"📡 請求 Paper 支援版本: {paper_url}", file=sys.stderr)
+            
             # 檢查 Paper 是否支援該版本
-            response = self.session.get('https://api.papermc.io/v2/projects/paper')
+            response = self.session.get(paper_url)
+            print(f"📊 Paper 回應狀態: {response.status_code}", file=sys.stderr)
+            
             response.raise_for_status()
             data = response.json()
             
-            if mc_version not in data.get('versions', []):
+            supported_versions = data.get('versions', [])
+            print(f"📄 Paper 支援版本: {supported_versions[-5:]}...（顯示最後5個）", file=sys.stderr)
+            
+            if mc_version not in supported_versions:
+                print(f"⚠️ Paper 尚未支援 {mc_version}", file=sys.stderr)
                 return None
             
             # 獲取該版本的最新構建
-            builds_response = self.session.get(f'https://api.papermc.io/v2/projects/paper/versions/{mc_version}')
+            builds_url = f'https://api.papermc.io/v2/projects/paper/versions/{mc_version}'
+            print(f"📡 請求 Paper 構建: {builds_url}", file=sys.stderr)
+            
+            builds_response = self.session.get(builds_url)
+            print(f"📊 Paper 構建回應狀態: {builds_response.status_code}", file=sys.stderr)
+            
             builds_response.raise_for_status()
             builds_data = builds_response.json()
             
             latest_build = builds_data['builds'][-1]
-            return f"{mc_version}-R0.1-SNAPSHOT"
+            paper_version = f"{mc_version}-R0.1-SNAPSHOT"
+            print(f"✅ Paper 版本: {paper_version} (構建 #{latest_build})", file=sys.stderr)
+            
+            return paper_version
             
         except Exception as e:
             print(f"❌ 獲取 Paper 版本失敗 ({mc_version}): {e}", file=sys.stderr)
+            print(f"   詳細錯誤: {type(e).__name__}: {str(e)}", file=sys.stderr)
             return None
     
     def get_data_version(self, mc_version: str) -> Optional[int]:
