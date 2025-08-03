@@ -148,8 +148,8 @@ class VersionFetcher:
         if target_versions:
             mc_versions = [v for v in mc_versions if v in target_versions]
         else:
-            # 預設只獲取最新的 5 個版本
-            mc_versions = mc_versions[:5]
+            # 獲取所有 1.21.x 版本（而不是限制為5個）
+            mc_versions = mc_versions
         
         print(f"📋 檢測到的 Minecraft 版本: {', '.join(mc_versions)}", file=sys.stderr)
         
