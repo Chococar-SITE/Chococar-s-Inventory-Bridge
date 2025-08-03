@@ -1,4 +1,4 @@
-name: Auto Update Versions
+name: Auto Update Versions (Simple)
 
 permissions:
   contents: write
@@ -22,15 +22,14 @@ on:
         type: string
 
 jobs:
-  check-versions:
+  check-and-update-versions:
     runs-on: ubuntu-latest
-    outputs:
-      has_updates: ${{ steps.check.outputs.has_updates }}
-      new_versions: ${{ steps.check.outputs.new_versions }}
-      
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
       
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -42,449 +41,85 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Check for new versions
+    - name: Fetch and check for updates
       id: check
       run: |
-        echo "🔍 檢查最新版本..."
+        echo "🔍 獲取最新版本數據..."
         
         # 動態獲取最新版本數據
-        echo "🔍 動態獲取最新版本數據..."
-        python scripts/fetch-latest-versions.py --output json > latest_versions.json
+        python scripts/fetch-latest-versions.py --output json > new_versions.json
         
-        # 如果動態獲取失敗，使用預生成的版本數據作為備份
-        if [ ! -s latest_versions.json ] || ! python -m json.tool latest_versions.json > /dev/null 2>&1; then
-          echo "⚠️ 動態獲取失敗，使用預生成的版本數據..."
-          cp data/latest_versions.json latest_versions.json
+        # 如果動態獲取失敗，使用現有數據
+        if [ ! -s new_versions.json ] || ! python -m json.tool new_versions.json > /dev/null 2>&1; then
+          echo "⚠️ 動態獲取失敗，使用現有數據..."
+          cp data/latest_versions.json new_versions.json
         else
           echo "✅ 成功獲取最新版本數據"
         fi
         
-        # 如果用戶指定了版本，則過濾數據
-        if [ -n "${{ github.event.inputs.target_versions }}" ]; then
-          echo "🔍 過濾指定版本：${{ github.event.inputs.target_versions }}"
-          cat > filter_versions.py << 'SCRIPT_EOF'
+        # 比較版本差異
+        python << 'EOF'
         import json
-        import sys
+        import os
         
-        target_versions = '${{ github.event.inputs.target_versions }}'.split()
-        with open('latest_versions.json', 'r') as f:
-            all_data = json.load(f)
+        # 讀取新舊版本數據
+        with open('new_versions.json', 'r') as f:
+            new_data = json.load(f)
         
-        filtered_data = {v: all_data[v] for v in target_versions if v in all_data}
+        try:
+            with open('data/latest_versions.json', 'r') as f:
+                old_data = json.load(f)
+        except FileNotFoundError:
+            old_data = {}
         
-        with open('latest_versions.json', 'w') as f:
-            json.dump(filtered_data, f, indent=2)
+        # 檢查是否有更新
+        has_updates = False
+        updates = []
         
-        print(f'過濾後版本: {list(filtered_data.keys())}', file=sys.stderr)
-        SCRIPT_EOF
-          python filter_versions.py
-        fi
-        
-        echo "✅ 版本數據準備完成"
-        
-        # 檢查是否有新版本或API版本更新
-        cat > check_versions.py << 'SCRIPT_EOF'
-        import json
-        import re
-        
-        # 讀取版本數據
-        with open('latest_versions.json', 'r') as f:
-            latest_data = json.load(f)
-        
-        # 讀取當前 build.yml 中的版本
-        with open('.github/workflows/build.yml', 'r') as f:
-            build_content = f.read()
-        
-        # 提取當前支援的版本
-        current_versions = re.findall(r'"(1\.21\.\d+)"', build_content)
-        current_versions = set(current_versions)
-        
-        # 檢查新版本
-        latest_versions = set(latest_data.keys())
-        new_versions = latest_versions - current_versions
-        
-        # 檢查API版本更新
-        api_updates = []
-        for version in current_versions:
-            if version in latest_data:
-                # 檢查每個版本的API是否有更新
-                current_yarn = re.search(rf'"{version}"\)\s*\n\s*echo "YARN_VERSION=([^"]*)"', build_content)
-                current_fabric = re.search(rf'"{version}"\)\s*\n.*?\n\s*echo "FABRIC_API_VERSION=([^"]*)"', build_content)
+        for version, new_info in new_data.items():
+            if version not in old_data:
+                updates.append(f"{version}(NEW)")
+                has_updates = True
+            else:
+                old_info = old_data[version]
+                changes = []
+                for key in ['yarn_mappings', 'fabric_api', 'paper', 'data_version']:
+                    if old_info.get(key) != new_info.get(key):
+                        changes.append(key)
+                        has_updates = True
                 
-                if current_yarn and current_fabric:
-                    current_yarn_ver = current_yarn.group(1)
-                    current_fabric_ver = current_fabric.group(1)
-                    
-                    latest_yarn_ver = latest_data[version]['yarn_mappings']
-                    latest_fabric_ver = latest_data[version]['fabric_api']
-                    
-                    if current_yarn_ver != latest_yarn_ver or current_fabric_ver != latest_fabric_ver:
-                        api_updates.append(version)
-                        print(f'API更新 {version}: Yarn {current_yarn_ver} → {latest_yarn_ver}, Fabric {current_fabric_ver} → {latest_fabric_ver}')
+                if changes:
+                    updates.append(f"{version}({','.join(changes)})")
         
-        print(f'目前版本: {sorted(current_versions)}')
-        print(f'最新版本: {sorted(latest_versions)}')
-        print(f'新遊戲版本: {sorted(new_versions)}')
-        print(f'API版本更新: {sorted(api_updates)}')
-        
-        has_updates = len(new_versions) > 0 or len(api_updates) > 0 or '${{ github.event.inputs.force_update }}' == 'true'
-        
-        # 調試輸出
-        print(f'🔍 調試信息:')
-        print(f'   新遊戲版本數量: {len(new_versions)}')
-        print(f'   API更新數量: {len(api_updates)}')
-        print(f'   強制更新: ${{ github.event.inputs.force_update }}')
-        print(f'   has_updates (布林值): {has_updates}')
-        print(f'   has_updates (字符串): {str(has_updates).lower()}')
+        # 強制更新檢查
+        if '${{ github.event.inputs.force_update }}' == 'true':
+            has_updates = True
+            updates.append("FORCE")
         
         # 輸出結果
-        all_updates = sorted(new_versions) + [f"{v}(API)" for v in sorted(api_updates)]
-        
-        # 確保 GITHUB_OUTPUT 變數存在
-        import os
         github_output = os.environ.get('GITHUB_OUTPUT')
         if github_output:
             with open(github_output, 'a') as f:
                 f.write(f'has_updates={str(has_updates).lower()}\n')
-                f.write(f'new_versions={" ".join(all_updates)}\n')
-            print(f'📤 已寫入 GITHUB_OUTPUT: has_updates={str(has_updates).lower()}')
-            print(f'📤 已寫入 GITHUB_OUTPUT: new_versions={" ".join(all_updates)}')
-        else:
-            print('⚠️ GITHUB_OUTPUT 環境變數未設置')
+                f.write(f'updates={" ".join(updates)}\n')
         
         print(f'有更新: {has_updates}')
-        if new_versions:
-            print(f'新遊戲版本: {", ".join(sorted(new_versions))}')
-        if api_updates:
-            print(f'API版本更新: {", ".join(sorted(api_updates))}')
-        SCRIPT_EOF
-        python check_versions.py
+        print(f'更新項目: {", ".join(updates) if updates else "無"}')
+        EOF
         
-        # 調試輸出
-        echo "🔍 調試信息："
-        echo "   has_updates 值: $(cat $GITHUB_OUTPUT | grep has_updates || echo '未找到')"
-        echo "   new_versions 值: $(cat $GITHUB_OUTPUT | grep new_versions || echo '未找到')"
-        echo "   GITHUB_OUTPUT 文件內容:"
-        cat $GITHUB_OUTPUT || echo "無法讀取 GITHUB_OUTPUT 文件"
-        
-    - name: Upload version data
+    - name: Create Pull Request for updates
       if: steps.check.outputs.has_updates == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: latest-versions
-        path: latest_versions.json
-        retention-days: 1
-
-  update-workflows:
-    needs: check-versions
-    if: needs.check-versions.outputs.has_updates == 'true'
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Debug outputs
-      run: |
-        echo "🔍 update-workflows job 已觸發"
-        echo "   has_updates: ${{ needs.check-versions.outputs.has_updates }}"
-        echo "   new_versions: ${{ needs.check-versions.outputs.new_versions }}"
-        
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        fetch-depth: 0
-        
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        
-    - name: Download version data
-      uses: actions/download-artifact@v4
-      with:
-        name: latest-versions
-        
-    - name: Update data files only
-      run: |
-        echo "🔄 只更新數據文件，不修改工作流程..."
-        
-        # 覆蓋 data/latest_versions.json 為最新版本
-        cp latest_versions.json data/latest_versions.json
-        
-        echo "✅ 已更新 data/latest_versions.json"
-        echo "📄 文件內容："
-        cat data/latest_versions.json
-        
-        # 移除所有工作流程文件修改代碼
-        cat > dummy_script.py << 'SCRIPT_EOF'
-        import json
-        import re
-        
-        # 讀取版本數據
-        try:
-            with open('latest_versions.json', 'r') as f:
-                content = f.read().strip()
-                if not content:
-                    print('❌ latest_versions.json 文件為空')
-                    exit(1)
-                versions_data = json.loads(content)
-        except FileNotFoundError:
-            print('❌ latest_versions.json 文件不存在')
-            exit(1)
-        except json.JSONDecodeError as e:
-            print(f'❌ JSON 解析錯誤: {e}')
-            exit(1)
-        
-        # 生成新的版本矩陣
-        complete_versions = [v for v, data in versions_data.items() if data['status'] == 'complete']
-        complete_versions.sort(key=lambda x: [int(i) for i in x.split('.')], reverse=True)
-        
-        print(f"完整支援的版本: {complete_versions}")
-        
-        # 更新 build.yml
-        with open('.github/workflows/build.yml', 'r') as f:
-            content = f.read()
-        
-        # 更新版本矩陣
-        matrix_versions = '\n'.join([f'          - "{v}"' for v in complete_versions])
-        content = re.sub(
-            r'minecraft_version:\s*\n(\s*-\s*"1\.21\.\d+"\s*\n)+',
-            f'minecraft_version: \n{matrix_versions}\n',
-            content
-        )
-        
-        # 更新版本配置 case 語句
-        cases = []
-        for version, data in versions_data.items():
-            if data['status'] != 'complete':
-                continue
-            case = f'          "{version}")\n            echo "YARN_VERSION={data["yarn_mappings"]}" >> $GITHUB_ENV\n            echo "FABRIC_API_VERSION={data["fabric_api"]}" >> $GITHUB_ENV\n            echo "PAPER_VERSION={data["paper"]}" >> $GITHUB_ENV\n            echo "DATA_VERSION={data["data_version"]}" >> $GITHUB_ENV\n            ;;'
-            cases.append(case)
-        
-        cases_content = '\n'.join(cases)
-        
-        # 替換 case 語句
-        content = re.sub(
-            r'case "\$MC_VERSION" in\n.*?\nesac',
-            f'case "$MC_VERSION" in\n{cases_content}\n        esac',
-            content,
-            flags=re.DOTALL
-        )
-        
-        with open('.github/workflows/build.yml', 'w') as f:
-            f.write(content)
-        
-        # 更新 gradle.properties（使用最新版本作為預設）
-        latest_version = complete_versions[0]
-        latest_data = versions_data[latest_version]
-        
-        gradle_content = "# Done to increase the memory available to gradle.\\n"
-        gradle_content += "org.gradle.jvmargs=-Xmx4G\\n\\n"
-        gradle_content += "# Fabric Properties (auto-updated)\\n"
-        gradle_content += f"minecraft_version={latest_version}\\n"
-        gradle_content += f"yarn_mappings={latest_data['yarn_mappings']}\\n"
-        gradle_content += "loader_version=0.16.9\\n\\n"
-        gradle_content += "# Mod Properties\\n"
-        gradle_content += "mod_version=1.0.0-SNAPSHOT\\n"
-        gradle_content += "maven_group=site.chococar\\n"
-        gradle_content += "archives_base_name=chococars-inventory-bridge\\n\\n"
-        gradle_content += "# Dependencies\\n"
-        gradle_content += f"fabric_version={latest_data['fabric_api']}\\n"
-        gradle_content += f"paper_version={latest_data['paper']}\\n"
-        gradle_content += f"data_version={latest_data['data_version']}\\n\\n"
-        gradle_content += "# CI/CD Properties\\n"
-        gradle_content += "ci_build=false"
-        
-        with open('gradle.properties', 'w') as f:
-            f.write(gradle_content)
-        
-        # 更新 README.md
-        print("📝 更新 README.md...")
-        try:
-            with open('README.md', 'r', encoding='utf-8') as f:
-                readme_content = f.read()
-            
-            # 更新支援的版本列表
-            versions_list = ', '.join([f'1.21.{i}' for i in sorted([int(v.split('.')[2]) for v in complete_versions])])
-            version_range = f"1.21.{min([int(v.split('.')[2]) for v in complete_versions])} - 1.21.{max([int(v.split('.')[2]) for v in complete_versions])}"
-            
-            # 更新主要版本信息
-            latest_mc = complete_versions[0]
-            latest_fabric_api = latest_data['fabric_api']
-            latest_paper = latest_data['paper']
-            
-            # 替換版本相關內容
-            import re
-            
-            # 更新版本兼容性行
-            readme_content = re.sub(
-                r'完全支援 Minecraft 1\.21\.X 版本（.*?）',
-                f'完全支援 Minecraft 1.21.X 版本（{version_range}）',
-                readme_content
-            )
-            
-            # 更新當前支援版本
-            readme_content = re.sub(
-                r'- \*\*Minecraft 1\.21\.\d+\*\*（完整支援）',
-                f'- **Minecraft {latest_mc}**（完整支援）',
-                readme_content
-            )
-            
-            # 更新系統需求中的版本
-            readme_content = re.sub(
-                r'- Fabric API 0\.\d+\.\d+\+',
-                f'- Fabric API {latest_fabric_api}+',
-                readme_content
-            )
-            
-            readme_content = re.sub(
-                r'- Minecraft 1\.21\.\d+',
-                f'- Minecraft {latest_mc}',
-                readme_content
-            )
-            
-            readme_content = re.sub(
-                r'- Paper 1\.21\.\d+\+',
-                f'- Paper {latest_paper}+',
-                readme_content
-            )
-            
-            # 添加更新時間戳
-            from datetime import datetime
-            update_time = datetime.now().strftime('%Y-%m-%d')
-            
-            # 如果沒有更新時間戳部分，在文件末尾添加
-            if '<!-- Auto-updated -->' not in readme_content:
-                readme_content += f'\\n\\n<!-- Auto-updated by GitHub Actions on {update_time} -->'
-            else:
-                readme_content = re.sub(
-                    r'<!-- Auto-updated by GitHub Actions on .*? -->',
-                    f'<!-- Auto-updated by GitHub Actions on {update_time} -->',
-                    readme_content
-                )
-            
-            with open('README.md', 'w', encoding='utf-8') as f:
-                f.write(readme_content)
-            
-            print(f"✅ README.md 已更新（支援版本：{versions_list}）")
-            
-        except Exception as e:
-            print(f"⚠️ README.md 更新失敗：{e}")
-        
-        print("✅ 文件更新完成")
-        SCRIPT_EOF
-        
-        python update_workflows.py
-        
-    - name: Update version scripts
-      run: |
-        echo "🔄 更新版本腳本..."
-        
-        cat > update_scripts.py << 'SCRIPT_EOF'
-        import json
-        from datetime import datetime
-        
-        try:
-            with open('latest_versions.json', 'r') as f:
-                content = f.read().strip()
-                if not content:
-                    print('❌ latest_versions.json 文件為空')
-                    exit(1)
-                versions_data = json.loads(content)
-        except FileNotFoundError:
-            print('❌ latest_versions.json 文件不存在')
-            exit(1)
-        except json.JSONDecodeError as e:
-            print(f'❌ JSON 解析錯誤: {e}')
-            exit(1)
-        
-        complete_versions = [v for v, data in versions_data.items() if data['status'] == 'complete']
-        complete_versions.sort(key=lambda x: [int(i) for i in x.split('.')])
-        
-        # 生成 shell 腳本
-        cases = []
-        for version in complete_versions:
-            data = versions_data[version]
-            case = f'  "{version}")\n    YARN_VERSION="{data["yarn_mappings"]}"\n    FABRIC_API_VERSION="{data["fabric_api"]}"\n    PAPER_VERSION="{data["paper"]}"\n    DATA_VERSION="{data["data_version"]}"\n    ;;'
-            cases.append(case)
-        
-        versions_str = ', '.join(complete_versions)
-        cases_content = '\n'.join(cases)
-        
-        shell_script = "#!/bin/bash\n\n"
-        shell_script += f"# 自動生成的版本更新腳本 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        shell_script += f"# 支援版本: {versions_str}\n\n"
-        shell_script += "set -e\n\n"
-        default_version = complete_versions[-1]
-        shell_script += 'MC_VERSION="${1:-' + default_version + '}"\n\n'
-        shell_script += "case \"$MC_VERSION\" in\n"
-        shell_script += cases_content + "\n"
-        shell_script += "  *)\n"
-        shell_script += "    echo \"❌ 不支援的版本: $MC_VERSION\"\n"
-        shell_script += f"    echo \"支援的版本: {versions_str}\"\n"
-        shell_script += "    exit 1\n"
-        shell_script += "    ;;\n"
-        shell_script += "esac\n\n"
-        shell_script += "echo \"🔧 正在更新到 Minecraft $MC_VERSION...\"\n\n"
-        shell_script += "# 更新 gradle.properties\n"
-        shell_script += "cat > gradle.properties << EOF\n"
-        shell_script += "# Done to increase the memory available to gradle.\n"
-        shell_script += "org.gradle.jvmargs=-Xmx4G\n\n"
-        shell_script += "# Fabric Properties\n"
-        shell_script += "minecraft_version=$MC_VERSION\n"
-        shell_script += "yarn_mappings=$YARN_VERSION\n"
-        shell_script += "loader_version=0.16.9\n\n"
-        shell_script += "# Mod Properties\n"
-        shell_script += "mod_version=1.0.0-SNAPSHOT\n"
-        shell_script += "maven_group=site.chococar\n"
-        shell_script += "archives_base_name=chococars-inventory-bridge\n\n"
-        shell_script += "# Dependencies\n"
-        shell_script += "fabric_version=$FABRIC_API_VERSION\n"
-        shell_script += "paper_version=$PAPER_VERSION\n"
-        shell_script += "data_version=$DATA_VERSION\n\n"
-        shell_script += "# CI/CD Properties\n"
-        shell_script += "ci_build=false\n"
-        shell_script += "EOF\n\n"
-        shell_script += "# 更新配置文件中的版本\n"
-        shell_script += "echo \"📝 更新配置文件...\"\n"
-        shell_script += "find . -name \"*.yml\" -type f -not -path \"./.git/*\" -exec sed -i.bak \"s/minecraftVersion: \\\".*\\\"/minecraftVersion: \\\"$MC_VERSION\\\"/g\" {} \\;\n\n"
-        shell_script += "# 清理備份文件\n"
-        shell_script += "find . -name \"*.yml.bak\" -delete\n\n"
-        shell_script += "# 更新常量文件中的數據版本\n"
-        shell_script += "echo \"🔢 更新數據版本...\"\n"
-        shell_script += "find . -name \"*.java\" -type f -exec sed -i.bak \"s/CURRENT_DATA_VERSION = [0-9]*/CURRENT_DATA_VERSION = $DATA_VERSION/g\" {} \\;\n"
-        shell_script += "find . -name \"*.java.bak\" -delete\n\n"
-        shell_script += "echo \"✅ 版本更新完成！\"\n"
-        shell_script += "echo \"📋 當前配置：\"\n"
-        shell_script += "echo \"   Minecraft: $MC_VERSION\"\n"
-        shell_script += "echo \"   Yarn: $YARN_VERSION\"\n"
-        shell_script += "echo \"   Fabric API: $FABRIC_API_VERSION\"\n"
-        shell_script += "echo \"   Paper: $PAPER_VERSION\"\n"
-        shell_script += "echo \"   Data Version: $DATA_VERSION\"\n"
-        shell_script += "echo \"\"\n"
-        shell_script += "echo \"🚀 現在可以運行 './gradlew build' 來構建專案\""
-        
-        with open('scripts/update-version.sh', 'w') as f:
-            f.write(shell_script)
-        
-        print("✅ 腳本更新完成")
-        SCRIPT_EOF
-        
-        python update_scripts.py
-        
-    - name: Create Pull Request
       run: |
         # 設置 Git 配置
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         
+        # 更新數據文件
+        cp new_versions.json data/latest_versions.json
+        
         # 檢查是否有變更
-        if git diff --quiet && git diff --staged --quiet; then
-          echo "沒有變更需要提交"
+        if git diff --quiet data/latest_versions.json; then
+          echo "數據文件沒有變更"
           exit 0
         fi
         
@@ -493,20 +128,14 @@ jobs:
         echo "🌿 創建分支: $BRANCH_NAME"
         git checkout -b "$BRANCH_NAME"
         
-        # 添加所有變更
-        git add .
-        
         # 提交變更
-        echo "📝 提交變更..."
-        git commit -m "🔄 自動更新版本 API
+        git add data/latest_versions.json
+        git commit -m "🔄 自動更新版本數據
 
-        新版本: ${{ needs.check-versions.outputs.new_versions }}
+        更新項目: ${{ steps.check.outputs.updates }}
         更新時間: $(date -u)
         
-        - 更新 GitHub Actions 工作流程
-        - 更新 gradle.properties  
-        - 更新版本腳本
-        - 更新 README.md 版本資訊
+        - 更新 data/latest_versions.json
         
         由 GitHub Actions 自動生成"
         
@@ -514,99 +143,26 @@ jobs:
         echo "📤 推送分支..."
         git push origin "$BRANCH_NAME"
         
-        # 使用 GitHub CLI 創建 PR
+        # 創建 PR
         echo "🔃 創建 Pull Request..."
         gh pr create \
-          --title "🔄 自動更新版本 API - ${{ needs.check-versions.outputs.new_versions }}" \
-          --body "$(cat <<'EOF'
-        ## 🎯 自動版本更新
+          --title "🔄 自動更新版本數據 - ${{ steps.check.outputs.updates }}" \
+          --body "## 🎯 自動版本數據更新
 
-        **更新內容:** ${{ needs.check-versions.outputs.new_versions }}
+        **更新項目:** ${{ steps.check.outputs.updates }}
 
-        ### 📋 變更摘要
-        - ✅ 更新 GitHub Actions 工作流程版本矩陣
-        - ✅ 更新 gradle.properties 預設版本  
-        - ✅ 更新版本切換腳本
-        - ✅ 更新 README.md 版本資訊
-
-        ### 🔍 檢測到的更新
-        $(echo "${{ needs.check-versions.outputs.new_versions }}" | tr ' ' '\n' | sed 's/^/- /')
+        ### 📋 變更內容
+        - ✅ 更新 \`data/latest_versions.json\` 版本數據
+        - 🔄 所有工作流程將自動使用新版本數據
 
         ### 🚀 下一步
-        - [ ] 審查變更內容
+        - [ ] 審查版本變更
         - [ ] 測試構建流程
         - [ ] 合併 PR
 
         ---
-        *此 PR 由 GitHub Actions 自動創建於 $(date -u)*
-        EOF
-        )" \
+        *此 PR 由 GitHub Actions 自動創建於 $(date -u)*" \
           --assignee "@me" \
           --label "enhancement,auto-update,version-update"
         
         echo "✅ Pull Request 已創建"
-        
-    - name: Comment on PR with build trigger
-      run: |
-        echo "🚀 準備觸發構建工作流程來驗證新版本..."
-        # 構建會在 PR 創建後自動觸發
-
-  test-build:
-    needs: [check-versions, update-workflows]
-    if: needs.check-versions.outputs.has_updates == 'true'
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout updated repository
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.ref }}
-        
-    - name: Test build with new versions
-      run: |
-        echo "🧪 測試新版本構建..."
-        
-        # 簡單的語法檢查
-        if ! grep -q "minecraft_version:" gradle.properties; then
-          echo "❌ gradle.properties 格式錯誤"
-          exit 1
-        fi
-        
-        if ! grep -q "minecraft_version:" .github/workflows/build.yml; then
-          echo "❌ build.yml 格式錯誤"
-          exit 1
-        fi
-        
-        echo "✅ 文件格式檢查通過"
-        
-        # 觸發測試構建（可選）
-        if [ "${{ github.event.inputs.force_update }}" == "true" ]; then
-          echo "🚀 觸發測試構建..."
-          # 這裡可以觸發實際的構建測試
-        fi
-        
-        echo "✅ 測試完成"
-
-  trigger-build:
-    needs: [check-versions, update-workflows, test-build]
-    if: needs.check-versions.outputs.has_updates == 'true'
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Trigger build workflow
-      uses: actions/github-script@v7
-      with:
-        script: |
-          console.log('🚀 觸發構建工作流程以驗證新版本...');
-          
-          await github.rest.actions.createWorkflowDispatch({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            workflow_id: 'build.yml',
-            ref: 'main',
-            inputs: {
-              release_type: 'snapshot'
-            }
-          });
-          
-          console.log('✅ 構建工作流程已觸發');
