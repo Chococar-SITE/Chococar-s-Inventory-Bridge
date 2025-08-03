@@ -24,10 +24,17 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Generate GitHub App Token
+      id: app-token
+      uses: actions/create-github-app-token@v1
+      with:
+        app-id: ${{ vars.APP_ID }}
+        private-key: ${{ secrets.PRIVATE_KEY }}
+        
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ steps.app-token.outputs.token }}
         fetch-depth: 0
       
     - name: Set up Python
@@ -109,7 +116,7 @@ jobs:
     - name: Create Pull Request for updates
       if: steps.check.outputs.has_updates == 'true'
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
       run: |
         # 設置 Git 配置
         git config --local user.email "action@github.com"
@@ -129,14 +136,21 @@ jobs:
         BRANCH_NAME="auto-update-versions-$(date +%Y%m%d-%H%M%S)"
         echo "🌿 創建分支: $BRANCH_NAME"
         git checkout -b "$BRANCH_NAME"
+        
+        # 提交變更
         git commit -m "🔄 自動更新版本數據
 
         更新項目: ${{ steps.check.outputs.updates }}
         更新時間: $(date -u)
         
         - 更新 data/latest_versions.json
+        - 檢測到 API 版本更新
         
-        由 GitHub Actions 自動生成"
+        由 GitHub Actions 自動生成
+        
+        🤖 Generated with Claude Code
+        
+        Co-Authored-By: Claude <noreply@anthropic.com>"
         
         # 推送分支
         echo "📤 推送分支..."
