@@ -7,6 +7,7 @@
 import json
 import requests
 import re
+import sys
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import argparse
@@ -38,7 +39,7 @@ class VersionFetcher:
             return versions
             
         except Exception as e:
-            print(f"❌ 獲取 Minecraft 版本失敗: {e}")
+            print(f"❌ 獲取 Minecraft 版本失敗: {e}", file=sys.stderr)
             return []
     
     def get_fabric_api_version(self, mc_version: str) -> Optional[str]:
@@ -65,7 +66,7 @@ class VersionFetcher:
             return None
             
         except Exception as e:
-            print(f"❌ 獲取 Fabric API 版本失敗 ({mc_version}): {e}")
+            print(f"❌ 獲取 Fabric API 版本失敗 ({mc_version}): {e}", file=sys.stderr)
             return None
     
     def get_yarn_mappings(self, mc_version: str) -> Optional[str]:
@@ -85,7 +86,7 @@ class VersionFetcher:
             return None
             
         except Exception as e:
-            print(f"❌ 獲取 Yarn Mappings 失敗 ({mc_version}): {e}")
+            print(f"❌ 獲取 Yarn Mappings 失敗 ({mc_version}): {e}", file=sys.stderr)
             return None
     
     def get_paper_version(self, mc_version: str) -> Optional[str]:
@@ -108,7 +109,7 @@ class VersionFetcher:
             return f"{mc_version}-R0.1-SNAPSHOT"
             
         except Exception as e:
-            print(f"❌ 獲取 Paper 版本失敗 ({mc_version}): {e}")
+            print(f"❌ 獲取 Paper 版本失敗 ({mc_version}): {e}", file=sys.stderr)
             return None
     
     def get_data_version(self, mc_version: str) -> Optional[int]:
@@ -136,12 +137,12 @@ class VersionFetcher:
             return detail_data.get('worldVersion')
             
         except Exception as e:
-            print(f"❌ 獲取數據版本失敗 ({mc_version}): {e}")
+            print(f"❌ 獲取數據版本失敗 ({mc_version}): {e}", file=sys.stderr)
             return None
     
     def fetch_all_versions(self, target_versions: List[str] = None) -> Dict:
         """獲取所有版本信息"""
-        print("🔍 正在獲取最新版本信息...")
+        print("🔍 正在獲取最新版本信息...", file=sys.stderr)
         
         mc_versions = self.get_minecraft_versions()
         if target_versions:
@@ -150,12 +151,12 @@ class VersionFetcher:
             # 預設只獲取最新的 5 個版本
             mc_versions = mc_versions[:5]
         
-        print(f"📋 檢測到的 Minecraft 版本: {', '.join(mc_versions)}")
+        print(f"📋 檢測到的 Minecraft 版本: {', '.join(mc_versions)}", file=sys.stderr)
         
         results = {}
         
         for mc_version in mc_versions:
-            print(f"\n🔍 處理 Minecraft {mc_version}...")
+            print(f"\n🔍 處理 Minecraft {mc_version}...", file=sys.stderr)
             
             fabric_api = self.get_fabric_api_version(mc_version)
             yarn = self.get_yarn_mappings(mc_version)
@@ -171,10 +172,10 @@ class VersionFetcher:
                 'status': 'complete' if all([yarn, fabric_api, paper, data_version]) else 'partial'
             }
             
-            print(f"  ✅ Yarn: {yarn}")
-            print(f"  ✅ Fabric API: {fabric_api}")
-            print(f"  ✅ Paper: {paper}")
-            print(f"  ✅ Data Version: {data_version}")
+            print(f"  ✅ Yarn: {yarn}", file=sys.stderr)
+            print(f"  ✅ Fabric API: {fabric_api}", file=sys.stderr)
+            print(f"  ✅ Paper: {paper}", file=sys.stderr)
+            print(f"  ✅ Data Version: {data_version}", file=sys.stderr)
         
         return results
 
@@ -306,10 +307,14 @@ def main():
     if args.save:
         with open(args.save, 'w', encoding='utf-8') as f:
             f.write(output)
-        print(f"\n💾 已保存到: {args.save}")
+        print(f"\n💾 已保存到: {args.save}", file=sys.stderr)
     else:
-        print(f"\n📄 輸出結果:")
-        print(output)
+        if args.output == 'json':
+            # 對於 JSON 輸出，只輸出純 JSON（用於管道重定向）
+            print(output)
+        else:
+            print(f"\n📄 輸出結果:")
+            print(output)
 
 if __name__ == '__main__':
     main()
