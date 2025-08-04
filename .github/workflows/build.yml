@@ -311,14 +311,48 @@ jobs:
         echo "🔧 安裝 Fabric server..."
         java -jar fabric-installer.jar server -mcversion $MC_VERSION -loader $LOADER_VERSION -downloadMinecraft
         
+        # 檢查生成的 server jar 文件名
+        echo "📋 檢查生成的文件..."
+        ls -la *.jar || true
+        
+        # 找到正確的 server jar 文件
+        SERVER_JAR=$(find . -name "fabric-server-*.jar" | head -n 1)
+        if [ -z "$SERVER_JAR" ]; then
+          echo "❌ 找不到 Fabric server jar 文件"
+          exit 1
+        fi
+        echo "✅ 找到 server jar: $SERVER_JAR"
+        echo "SERVER_JAR_NAME=$(basename $SERVER_JAR)" >> $GITHUB_ENV
+        
         # 創建 mods 目錄並複製我們的模組
         mkdir -p mods
         
         # 下載 Fabric API
         echo "📥 下載 Fabric API $FABRIC_API_VERSION..."
-        wget -O "mods/fabric-api-$FABRIC_API_VERSION.jar" "https://github.com/FabricMC/fabric/releases/download/$(echo $FABRIC_API_VERSION | cut -d'+' -f1)/fabric-api-$FABRIC_API_VERSION.jar" || {
-          echo "⚠️ 無法下載 Fabric API，繼續測試..."
-        }
+        # 使用 Modrinth API 獲取 Fabric API 下載連結
+        API_URL="https://api.modrinth.com/v2/project/fabric-api/version?game_versions=[\"$MC_VERSION\"]&loaders=[\"fabric\"]"
+        echo "🔍 查詢 API: $API_URL"
+        
+        FABRIC_API_URL=$(curl -s "$API_URL" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    if data and len(data) > 0:
+        print(data[0]['files'][0]['url'])
+    else:
+        print('')
+except:
+    print('')
+")
+        
+        if [ -n "$FABRIC_API_URL" ]; then
+          echo "✅ 找到 Fabric API 下載連結: $FABRIC_API_URL"
+          wget -O "mods/fabric-api-$FABRIC_API_VERSION.jar" "$FABRIC_API_URL" || {
+            echo "⚠️ 下載失敗，繼續測試..."
+          }
+        else
+          echo "⚠️ 無法找到對應版本的 Fabric API，繼續測試..."
+        fi
         
         # 複製我們的模組
         find . -name "*.jar" -path "*/chococars-inventory-bridge-*" -exec cp {} mods/ \;
@@ -394,7 +428,7 @@ jobs:
         echo "⏱️ 將運行 60 秒後自動關閉"
         
         # 在背景啟動伺服器
-        java -Xmx2G -Xms1G -jar fabric-server-mc.$MC_VERSION-loader.$LOADER_VERSION.jar nogui > server.log 2>&1 &
+        java -Xmx2G -Xms1G -jar "$SERVER_JAR_NAME" nogui > server.log 2>&1 &
         SERVER_PID=$!
         
         echo "📋 伺服器 PID: $SERVER_PID"
@@ -440,8 +474,7 @@ jobs:
         
         # 優雅關閉伺服器
         echo "🛑 正在關閉伺服器..."
-        echo "stop" > server_input
-        timeout 10 tail -f server_input | java -jar fabric-server-mc.$MC_VERSION-loader.$LOADER_VERSION.jar nogui || true
+        kill -TERM $SERVER_PID 2>/dev/null || true
         
         # 強制終止（如果還在運行）
         kill $SERVER_PID 2>/dev/null || true
