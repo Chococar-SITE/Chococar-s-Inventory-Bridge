@@ -1,12 +1,14 @@
 package site.chococar.inventorybridge.fabric;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 import site.chococar.inventorybridge.common.config.ConfigurationManager;
 import site.chococar.inventorybridge.common.database.DatabaseConnection;
+import site.chococar.inventorybridge.fabric.commands.InventoryBridgeCommand;
 import site.chococar.inventorybridge.fabric.sync.FabricInventorySyncManager;
 import site.chococar.inventorybridge.fabric.util.FabricLogger;
 
@@ -35,6 +37,11 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         
         // 初始化同步管理器
         syncManager = new FabricInventorySyncManager(databaseConnection, configManager);
+        
+        // 註冊指令
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            InventoryBridgeCommand.register(dispatcher);
+        });
         
         // 註冊伺服器生命週期事件
         ServerLifecycleEvents.SERVER_STARTING.register(this::onServerStarting);
@@ -97,5 +104,51 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
     public boolean reconnectDatabase() {
         LOGGER.info("管理員請求重新連接資料庫");
         return databaseConnection.reconnect();
+    }
+    
+    public boolean reloadPluginConfig() {
+        LOGGER.info("管理員請求重新載入配置");
+        
+        try {
+            // 重新載入配置文件
+            configManager.loadConfig();
+            LOGGER.info("配置文件重新載入成功");
+            
+            // 嘗試重新連接資料庫（使用新配置）
+            boolean dbReconnected = databaseConnection.reconnect();
+            
+            if (dbReconnected) {
+                LOGGER.info("╔══════════════════════════════════════════════════════════════════════════════════════╗");
+                LOGGER.info("║                             ✅ 配置重新載入完成 ✅                                  ║");
+                LOGGER.info("║                                                                                      ║");
+                LOGGER.info("║  配置文件已重新載入                                                                   ║");
+                LOGGER.info("║  資料庫連接已更新                                                                     ║");
+                LOGGER.info("║  所有功能恢復正常運作                                                                 ║");
+                LOGGER.info("║                                                                                      ║");
+                LOGGER.info("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+            } else {
+                LOGGER.error("╔══════════════════════════════════════════════════════════════════════════════════════╗");
+                LOGGER.error("║                             ⚠️ 配置重新載入部分成功 ⚠️                              ║");
+                LOGGER.error("║                                                                                      ║");
+                LOGGER.error("║  配置文件已重新載入                                                                   ║");
+                LOGGER.error("║  但資料庫連接失敗，仍處於待機模式                                                      ║");
+                LOGGER.error("║                                                                                      ║");
+                LOGGER.error("║  錯誤原因: {}                                      ║", String.format("%-58s", databaseConnection.getLastConnectionError()));
+                LOGGER.error("║                                                                                      ║");
+                LOGGER.error("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+            }
+            
+            return true;
+        } catch (Exception e) {
+            LOGGER.error("╔══════════════════════════════════════════════════════════════════════════════════════╗");
+            LOGGER.error("║                             ❌ 配置重新載入失敗 ❌                                    ║");
+            LOGGER.error("║                                                                                      ║");
+            LOGGER.error("║  錯誤原因: {}                                      ║", String.format("%-58s", e.getMessage()));
+            LOGGER.error("║                                                                                      ║");
+            LOGGER.error("║  請檢查配置文件格式是否正確                                                            ║");
+            LOGGER.error("║                                                                                      ║");
+            LOGGER.error("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+            return false;
+        }
     }
 }

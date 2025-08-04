@@ -76,4 +76,111 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
     public static ChococarsInventoryBridgePlugin getInstance() {
         return getPlugin(ChococarsInventoryBridgePlugin.class);
     }
+    
+    public boolean reloadPluginConfig() {
+        getLogger().info("管理員請求重新載入配置");
+        
+        try {
+            // 重新載入配置文件
+            configManager.loadConfig();
+            getLogger().info("配置文件重新載入成功");
+            
+            // 重新初始化資料庫連接（使用新配置）
+            if (databaseManager != null) {
+                databaseManager.close();
+            }
+            
+            databaseManager = new PaperDatabaseManager(configManager);
+            
+            try {
+                databaseManager.initialize();
+                
+                // 重新初始化同步管理器
+                syncManager = new PaperInventorySyncManager(databaseManager);
+                
+                // 測試資料庫連接
+                boolean dbInitialized = testDatabaseConnection();
+                
+                if (dbInitialized) {
+                    getLogger().info("╔══════════════════════════════════════════════════════════════════════════════════════╗");
+                    getLogger().info("║                             ✅ 配置重新載入完成 ✅                                  ║");
+                    getLogger().info("║                                                                                      ║");
+                    getLogger().info("║  配置文件已重新載入                                                                   ║");
+                    getLogger().info("║  資料庫連接已重新初始化                                                               ║");
+                    getLogger().info("║  同步管理器已更新                                                                     ║");
+                    getLogger().info("║  所有功能恢復正常運作                                                                 ║");
+                    getLogger().info("║                                                                                      ║");
+                    getLogger().info("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+                } else {
+                    getLogger().warning("╔══════════════════════════════════════════════════════════════════════════════════════╗");
+                    getLogger().warning("║                             ⚠️ 配置重新載入部分成功 ⚠️                              ║");
+                    getLogger().warning("║                                                                                      ║");
+                    getLogger().warning("║  配置文件已重新載入                                                                   ║");
+                    getLogger().warning("║  但資料庫連接失敗，可能進入待機模式                                                    ║");
+                    getLogger().warning("║                                                                                      ║");
+                    getLogger().warning("║  請檢查資料庫設定和連接狀態                                                           ║");
+                    getLogger().warning("║                                                                                      ║");
+                    getLogger().warning("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+                }
+            } catch (Exception e) {
+                getLogger().severe("初始化資料庫時發生錯誤: " + e.getMessage());
+                return false;
+            }
+            
+            return true;
+        } catch (Exception e) {
+            getLogger().severe("╔══════════════════════════════════════════════════════════════════════════════════════╗");
+            getLogger().severe("║                             ❌ 配置重新載入失敗 ❌                                    ║");
+            getLogger().severe("║                                                                                      ║");
+            getLogger().severe("║  錯誤原因: " + String.format("%-58s", e.getMessage()) + " ║");
+            getLogger().severe("║                                                                                      ║");
+            getLogger().severe("║  請檢查配置文件格式是否正確                                                            ║");
+            getLogger().severe("║                                                                                      ║");
+            getLogger().severe("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+            return false;
+        }
+    }
+    
+    public boolean reconnectDatabase() {
+        getLogger().info("管理員請求重新連接資料庫");
+        
+        try {
+            if (databaseManager != null) {
+                databaseManager.close();
+            }
+            
+            databaseManager = new PaperDatabaseManager(configManager);
+            databaseManager.initialize();
+            
+            // 重新初始化同步管理器
+            syncManager = new PaperInventorySyncManager(databaseManager);
+            
+            boolean success = testDatabaseConnection();
+            
+            if (success) {
+                getLogger().info("✅ 資料庫重新連接成功");
+            } else {
+                getLogger().warning("❌ 資料庫重新連接失敗");
+            }
+            
+            return success;
+        } catch (Exception e) {
+            getLogger().severe("❌ 重新連接資料庫時發生錯誤: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean testDatabaseConnection() {
+        try {
+            if (databaseManager != null && databaseManager.getConnection() != null) {
+                try (var connection = databaseManager.getConnection()) {
+                    return connection.isValid(5);
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            getLogger().warning("資料庫連接測試失敗: " + e.getMessage());
+            return false;
+        }
+    }
 }

@@ -33,8 +33,35 @@ public class InventoryBridgeCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 
-                plugin.getConfigManager().reloadConfig();
-                sender.sendMessage(ChatColor.GREEN + "Configuration reloaded successfully!");
+                sender.sendMessage(ChatColor.YELLOW + "Reloading configuration...");
+                boolean success = plugin.reloadPluginConfig();
+                
+                if (success) {
+                    sender.sendMessage(ChatColor.GREEN + "✅ Configuration reloaded successfully!");
+                    sender.sendMessage(ChatColor.GREEN + "Database connection updated, all features restored.");
+                } else {
+                    sender.sendMessage(ChatColor.RED + "❌ Configuration reload failed!");
+                    sender.sendMessage(ChatColor.RED + "Check console for detailed error information.");
+                }
+                return true;
+            }
+            
+            case "reconnect" -> {
+                if (!sender.hasPermission("chococars.inventorybridge.reload")) {
+                    sender.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
+                    return true;
+                }
+                
+                sender.sendMessage(ChatColor.YELLOW + "Reconnecting to database...");
+                boolean success = plugin.reconnectDatabase();
+                
+                if (success) {
+                    sender.sendMessage(ChatColor.GREEN + "✅ Database reconnected successfully!");
+                    sender.sendMessage(ChatColor.GREEN + "All inventory sync features are now active.");
+                } else {
+                    sender.sendMessage(ChatColor.RED + "❌ Database reconnection failed!");
+                    sender.sendMessage(ChatColor.RED + "Please check database settings and connection.");
+                }
                 return true;
             }
             
@@ -117,7 +144,8 @@ public class InventoryBridgeCommand implements CommandExecutor, TabCompleter {
     
     private void sendHelp(CommandSender sender) {
         sender.sendMessage(ChatColor.GOLD + "=== Chococar's Inventory Bridge Commands ===");
-        sender.sendMessage(ChatColor.YELLOW + "/ib reload" + ChatColor.WHITE + " - Reload the configuration");
+        sender.sendMessage(ChatColor.YELLOW + "/ib reload" + ChatColor.WHITE + " - Reload configuration and reconnect database");
+        sender.sendMessage(ChatColor.YELLOW + "/ib reconnect" + ChatColor.WHITE + " - Reconnect to database only");
         sender.sendMessage(ChatColor.YELLOW + "/ib sync <load|save>" + ChatColor.WHITE + " - Manually sync inventory");
         sender.sendMessage(ChatColor.YELLOW + "/ib status" + ChatColor.WHITE + " - Check sync status");
         sender.sendMessage(ChatColor.YELLOW + "/ib info" + ChatColor.WHITE + " - Show plugin information");
@@ -128,7 +156,7 @@ public class InventoryBridgeCommand implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
         
         if (args.length == 1) {
-            List<String> subcommands = Arrays.asList("reload", "sync", "status", "info");
+            List<String> subcommands = Arrays.asList("reload", "reconnect", "sync", "status", "info");
             for (String subcommand : subcommands) {
                 if (subcommand.toLowerCase().startsWith(args[0].toLowerCase())) {
                     completions.add(subcommand);
