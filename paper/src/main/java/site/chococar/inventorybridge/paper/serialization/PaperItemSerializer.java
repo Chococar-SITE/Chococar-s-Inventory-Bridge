@@ -262,4 +262,32 @@ public class PaperItemSerializer {
             return null;
         }
     }
+    
+    /**
+     * 序列化ItemStack陣列 (用於NBT讀取)
+     */
+    public static String serializeInventoryArray(ItemStack[] items) {
+        if (items == null) {
+            return "[]";
+        }
+        
+        JsonObject json = new JsonObject();
+        json.addProperty("size", items.length);
+        json.addProperty("minecraft_version", CURRENT_VERSION);
+        json.addProperty("data_version", CURRENT_DATA_VERSION);
+        
+        JsonObject itemsJson = new JsonObject();
+        
+        for (int i = 0; i < items.length; i++) {
+            if (items[i] != null && items[i].getType() != Material.AIR) {
+                String serializedItem = serializeItemStack(items[i]);
+                if (serializedItem != null) {
+                    itemsJson.addProperty(String.valueOf(i), serializedItem);
+                }
+            }
+        }
+        
+        json.add("items", itemsJson);
+        return GSON.toJson(json);
+    }
 }

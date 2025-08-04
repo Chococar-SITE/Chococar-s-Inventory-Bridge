@@ -1,5 +1,8 @@
 package site.chococar.inventorybridge.fabric.sync;
 
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.server.network.ServerPlayerEntity;
 import site.chococar.inventorybridge.common.config.ConfigurationManager;
 import site.chococar.inventorybridge.common.database.DatabaseConnection;
@@ -432,9 +435,50 @@ public class FabricInventorySyncManager {
                     hunger = onlinePlayer.getHungerManager().getFoodLevel();
                 }
             } else {
-                // 玩家離線，創建初始記錄
-                inventoryData = createEmptyInventoryData();
-                ChococarsInventoryBridgeFabric.getLogger().info("玩家 " + playerUuid + " 離線，創建初始資料庫記錄");
+                // 玩家離線，嘗試從檔案讀取背包資料
+                try {
+                    NbtCompound playerData = NbtIo.readCompressed(playerFile.toPath(), NbtSizeTracker.ofUnlimitedBytes());
+                    
+                    if (playerData != null) {
+                        // 讀取背包資料
+                        if (playerData.contains("Inventory", 9)) {
+                            inventoryData = FabricItemSerializer.serializeNbtList(playerData.getList("Inventory", 10));
+                        } else {
+                            inventoryData = "[]"; // 如果沒有背包資料則為空
+                        }
+                        
+                        // 讀取終界箱資料
+                        if (config.getBoolean("sync.syncEnderChest", true) && playerData.contains("EnderItems", 9)) {
+                            enderChestData = FabricItemSerializer.serializeNbtList(playerData.getList("EnderItems", 10));
+                        }
+                        
+                        // 讀取經驗值
+                        if (config.getBoolean("sync.syncExperience", true)) {
+                            experience = playerData.getInt("XpTotal");
+                            experienceLevel = playerData.getInt("XpLevel");
+                        }
+                        
+                        // 讀取血量
+                        if (config.getBoolean("sync.syncHealth", false)) {
+                            health = playerData.getFloat("Health");
+                        }
+                        
+                        // 讀取飢餓值
+                        if (config.getBoolean("sync.syncHunger", false)) {
+                            hunger = playerData.getInt("foodLevel");
+                        }
+                        
+                        ChococarsInventoryBridgeFabric.getLogger().info("從檔案讀取玩家 " + playerUuid + " 的離線資料並同步至資料庫");
+                    } else {
+                        ChococarsInventoryBridgeFabric.getLogger().warn("無法讀取玩家 " + playerUuid + " 的檔案資料，跳過同步");
+                        logSync(playerUuid, "INITIAL_SYNC", "FAILED", "無法讀取玩家檔案資料");
+                        return false;
+                    }
+                } catch (Exception e) {
+                    ChococarsInventoryBridgeFabric.getLogger().error("讀取玩家 " + playerUuid + " 離線檔案失敗，跳過同步: " + e.getMessage());
+                    logSync(playerUuid, "INITIAL_SYNC", "FAILED", "檔案讀取異常: " + e.getMessage());
+                    return false;
+                }
             }
             
             saveInventoryToDatabase(
@@ -457,5 +501,19 @@ public class FabricInventorySyncManager {
     private String createEmptyInventoryData() {
         // 創建一個空的物品欄資料字串
         return "[]"; // 空的 JSON 陣列表示空物品欄
+    }
+    
+    /**
+     * 設置伺服器實例 (在伺服器啟動時調用)
+     */
+    public static void setServerInstance(net.minecraft.server.MinecraftServer server) {
+        serverInstance = server;
+    }
+    
+    /**
+     * 獲取伺服器實例
+     */
+    public static net.minecraft.server.MinecraftServer getServerInstance() {
+        return serverInstance;
     }
 }

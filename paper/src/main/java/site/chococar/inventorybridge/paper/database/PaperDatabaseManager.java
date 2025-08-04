@@ -1,7 +1,7 @@
 package site.chococar.inventorybridge.paper.database;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
+import site.chococar.inventorybridge.common.config.ConfigurationManager;
+import site.chococar.inventorybridge.common.database.DatabaseConnection;
 import site.chococar.inventorybridge.paper.config.PaperConfigManager;
 
 import java.sql.Connection;
@@ -12,105 +12,71 @@ import java.util.UUID;
 import java.util.logging.Logger;
 
 public class PaperDatabaseManager {
-    private final PaperConfigManager configManager;
+    private final DatabaseConnection databaseConnection;
     private final Logger logger;
-    private HikariDataSource dataSource;
-    private String tablePrefix;
-    private volatile boolean standbyMode = false;
-    private String lastConnectionError;
     
     public PaperDatabaseManager(PaperConfigManager configManager) {
-        this.configManager = configManager;
         this.logger = Logger.getLogger("ChococarsInventoryBridge");
+        // 直接使用Paper配置管理器的Common ConfigurationManager
+        this.databaseConnection = new DatabaseConnection(configManager.getConfigurationManager());
     }
     
     public void initialize() {
-        try {
-            this.tablePrefix = configManager.getTablePrefix();
-            
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl(String.format("jdbc:mysql://%s:%d/%s?useSSL=%s&allowPublicKeyRetrieval=true&serverTimezone=UTC",
-                    configManager.getDatabaseHost(), 
-                    configManager.getDatabasePort(), 
-                    configManager.getDatabaseName(), 
-                    configManager.useSSL()));
-            config.setUsername(configManager.getDatabaseUsername());
-            config.setPassword(configManager.getDatabasePassword());
-            config.setMaximumPoolSize(configManager.getMaxPoolSize());
-            config.setConnectionTimeout(configManager.getConnectionTimeout());
-            config.setDriverClassName("com.mysql.cj.jdbc.Driver");
-            config.addDataSourceProperty("cachePrepStmts", "true");
-            config.addDataSourceProperty("prepStmtCacheSize", "250");
-            config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
-            
-            dataSource = new HikariDataSource(config);
-            
-            createTables();
-            standbyMode = false;
-            lastConnectionError = null;
-            logger.info("Paper database connection initialized successfully");
-        } catch (Exception e) {
-            standbyMode = true;
-            lastConnectionError = e.getMessage();
-            logger.severe("❌ 資料庫連接失敗，進入待機模式");
-            logger.severe("錯誤原因: " + e.getMessage());
-            logger.severe("插件將繼續運行，但物品欄同步功能已停用");
-            logger.severe("請修復資料庫問題後使用 '/ib reconnect' 重新連接");
-        }
-    }
-    
-    private void createTables() {
-        String inventoryTable = String.format("""
-            CREATE TABLE IF NOT EXISTS `%sinventories` (
-                `id` INT AUTO_INCREMENT PRIMARY KEY,
-                `player_uuid` VARCHAR(36) NOT NULL,
-                `server_id` VARCHAR(64) NOT NULL,
-                `inventory_data` LONGTEXT NOT NULL,
-                `ender_chest_data` LONGTEXT,
-                `experience` INT DEFAULT 0,
-                `experience_level` INT DEFAULT 0,
-                `health` FLOAT DEFAULT 20.0,
-                `hunger` INT DEFAULT 20,
-                `minecraft_version` VARCHAR(16) NOT NULL,
-                `data_version` INT NOT NULL,
-                `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY `unique_player_server` (`player_uuid`, `server_id`),
-                INDEX `idx_player_uuid` (`player_uuid`),
-                INDEX `idx_last_updated` (`last_updated`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            """, tablePrefix);
-        
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(inventoryTable)) {
-            stmt.executeUpdate();
-            logger.info("Paper database tables created successfully");
-        } catch (SQLException e) {
-            logger.severe("Failed to create database tables: " + e.getMessage());
-        }
+        databaseConnection.initialize();
+        logger.info("Paper database initialized through Common module");
     }
     
     public Connection getConnection() throws SQLException {
-        return dataSource.getConnection();
+        return databaseConnection.getConnection();
     }
     
+    public String getTablePrefix() {
+        return databaseConnection.getTablePrefix();
+    }
+    
+    public boolean isStandbyMode() {
+        return databaseConnection.isStandbyMode();
+    }
+    
+    public String getLastConnectionError() {
+        return databaseConnection.getLastConnectionError();
+    }
+    
+    public boolean reconnect() {
+        boolean success = databaseConnection.reconnect();
+        if (success) {
+            logger.info("✅ 資料庫重新連接成功");
+        } else {
+            logger.severe("❌ 資料庫重新連接失敗");
+        }
+        return success;
+    }
+    
+    public void close() {
+        databaseConnection.close();
+        logger.info("Paper database connection closed");
+    }
+    
+    // Paper特有的便利方法
     public void saveInventory(UUID playerUuid, String serverId, String inventoryData, 
-                             String enderChestData, int experience, int experienceLevel,
-                             double health, int hunger, String minecraftVersion, int dataVersion) {
+                            String enderChestData, int experience, int experienceLevel, 
+                            double health, int hunger, String minecraftVersion, int dataVersion) {
         String sql = String.format("""
-            INSERT INTO `%sinventories` 
-            (`player_uuid`, `server_id`, `inventory_data`, `ender_chest_data`, 
-             `experience`, `experience_level`, `health`, `hunger`, `minecraft_version`, `data_version`)
+            INSERT INTO `%sinventories` (`player_uuid`, `server_id`, `inventory_data`, `ender_chest_data`, 
+                                       `experience`, `experience_level`, `health`, `hunger`, 
+                                       `minecraft_version`, `data_version`)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-            `inventory_data` = VALUES(`inventory_data`),
-            `ender_chest_data` = VALUES(`ender_chest_data`),
-            `experience` = VALUES(`experience`),
-            `experience_level` = VALUES(`experience_level`),
-            `health` = VALUES(`health`),
-            `hunger` = VALUES(`hunger`),
-            `minecraft_version` = VALUES(`minecraft_version`),
-            `data_version` = VALUES(`data_version`)
-            """, tablePrefix);
+                `inventory_data` = VALUES(`inventory_data`),
+                `ender_chest_data` = VALUES(`ender_chest_data`),
+                `experience` = VALUES(`experience`),
+                `experience_level` = VALUES(`experience_level`),
+                `health` = VALUES(`health`),
+                `hunger` = VALUES(`hunger`),
+                `minecraft_version` = VALUES(`minecraft_version`),
+                `data_version` = VALUES(`data_version`),
+                `last_updated` = CURRENT_TIMESTAMP
+            """, getTablePrefix());
         
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -126,17 +92,17 @@ public class PaperDatabaseManager {
             stmt.setInt(10, dataVersion);
             stmt.executeUpdate();
         } catch (SQLException e) {
-            logger.severe("Failed to save inventory for player " + playerUuid + ": " + e.getMessage());
+            logger.severe("保存背包資料失敗: " + e.getMessage());
         }
     }
     
     public PaperInventoryData loadInventory(UUID playerUuid, String serverId) {
         String sql = String.format("""
-            SELECT `inventory_data`, `ender_chest_data`, `experience`, `experience_level`,
+            SELECT `inventory_data`, `ender_chest_data`, `experience`, `experience_level`, 
                    `health`, `hunger`, `minecraft_version`, `data_version`, `last_updated`
             FROM `%sinventories`
             WHERE `player_uuid` = ? AND `server_id` = ?
-            """, tablePrefix);
+            """, getTablePrefix());
         
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -159,7 +125,7 @@ public class PaperDatabaseManager {
                 }
             }
         } catch (SQLException e) {
-            logger.severe("Failed to load inventory for player " + playerUuid + ": " + e.getMessage());
+            logger.severe("載入背包資料失敗: " + e.getMessage());
         }
         
         return null;
@@ -167,9 +133,10 @@ public class PaperDatabaseManager {
     
     public boolean hasInventory(UUID playerUuid, String serverId) {
         String sql = String.format("""
-            SELECT COUNT(*) FROM `%sinventories`
-            WHERE `player_uuid` = ? AND `server_id` = ?
-            """, tablePrefix);
+            SELECT 1 FROM `%sinventories` 
+            WHERE `player_uuid` = ? AND `server_id` = ? 
+            LIMIT 1
+            """, getTablePrefix());
         
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -177,22 +144,19 @@ public class PaperDatabaseManager {
             stmt.setString(2, serverId);
             
             try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt(1) > 0;
-                }
+                return rs.next();
             }
         } catch (SQLException e) {
-            logger.severe("Failed to check inventory existence for player " + playerUuid + ": " + e.getMessage());
+            logger.warning("檢查背包資料失敗: " + e.getMessage());
+            return false;
         }
-        
-        return false;
     }
     
     public void logSync(UUID playerUuid, String serverId, String syncType, String status, String errorMessage) {
         String sql = String.format("""
             INSERT INTO `%ssync_log` (`player_uuid`, `server_id`, `sync_type`, `status`, `error_message`)
             VALUES (?, ?, ?, ?, ?)
-            """, tablePrefix);
+            """, getTablePrefix());
         
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -207,38 +171,4 @@ public class PaperDatabaseManager {
         }
     }
     
-    public boolean isStandbyMode() {
-        return standbyMode;
-    }
-    
-    public String getLastConnectionError() {
-        return lastConnectionError;
-    }
-    
-    public boolean reconnect() {
-        logger.info("嘗試重新連接資料庫...");
-        
-        // 關閉現有連接
-        if (dataSource != null && !dataSource.isClosed()) {
-            dataSource.close();
-        }
-        
-        // 重新初始化
-        initialize();
-        
-        if (!standbyMode) {
-            logger.info("✅ 資料庫重新連接成功");
-            return true;
-        } else {
-            logger.severe("❌ 資料庫重新連接失敗");
-            return false;
-        }
-    }
-    
-    public void close() {
-        if (dataSource != null && !dataSource.isClosed()) {
-            dataSource.close();
-            logger.info("Paper database connection closed");
-        }
-    }
 }

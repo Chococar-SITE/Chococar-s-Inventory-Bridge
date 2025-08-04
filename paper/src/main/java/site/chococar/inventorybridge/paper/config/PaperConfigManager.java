@@ -1,187 +1,152 @@
 package site.chococar.inventorybridge.paper.config;
 
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
+import site.chococar.inventorybridge.common.config.ConfigurationManager;
 import site.chococar.inventorybridge.paper.ChococarsInventoryBridgePlugin;
 
-import java.io.File;
-import java.io.IOException;
+import java.nio.file.Path;
 
 public class PaperConfigManager {
-    private static final int CURRENT_CONFIG_VERSION = 2;
     private final ChococarsInventoryBridgePlugin plugin;
-    private FileConfiguration config;
-    private File configFile;
+    private final ConfigurationManager configManager;
     
     public PaperConfigManager(ChococarsInventoryBridgePlugin plugin) {
         this.plugin = plugin;
-        this.configFile = new File(plugin.getDataFolder(), "config.yml");
+        Path configPath = plugin.getDataFolder().toPath().resolve("config.yml");
+        this.configManager = new ConfigurationManager(configPath);
     }
     
     public void loadConfig() {
-        if (!configFile.exists()) {
+        // 如果配置文件不存在，先創建默認配置
+        Path configPath = plugin.getDataFolder().toPath().resolve("config.yml");
+        if (!configPath.toFile().exists()) {
             plugin.saveDefaultConfig();
         }
         
-        config = YamlConfiguration.loadConfiguration(configFile);
-        
-        // 檢查配置版本
-        int configVersion = config.getInt("version", 1);
-        
-        if (configVersion < CURRENT_CONFIG_VERSION) {
-            plugin.getLogger().info("檢測到舊版配置文件 (版本 " + configVersion + "，當前版本 " + CURRENT_CONFIG_VERSION + ")，開始遷移...");
-            migrateConfig(configVersion);
-            plugin.getLogger().info("配置文件遷移完成");
-        } else if (configVersion > CURRENT_CONFIG_VERSION) {
-            plugin.getLogger().warning("配置文件版本 (" + configVersion + ") 高於當前支持版本 (" + CURRENT_CONFIG_VERSION + ")，可能存在兼容性問題");
-        } else {
-            plugin.getLogger().info("配置文件加載成功 (版本 " + configVersion + ")");
-        }
-    }
-    
-    private void migrateConfig(int fromVersion) {
-        plugin.getLogger().info("開始從版本 " + fromVersion + " 遷移配置到版本 " + CURRENT_CONFIG_VERSION);
-        
-        if (fromVersion == 1) {
-            migrateFromV1ToV2();
-        }
-        
-        // 更新版本號
-        config.set("version", CURRENT_CONFIG_VERSION);
-        saveConfig();
-        
-        plugin.getLogger().info("配置遷移完成，已保留所有自定義設置");
-    }
-    
-    private void migrateFromV1ToV2() {
-        // 版本1到版本2的遷移邏輯
-        // 主要是將自動同步默認改為關閉，並添加版本號
-        
-        // 如果沒有明確設置 syncOnJoin，則設為 false（新的安全默認值）
-        if (!config.contains("sync.syncOnJoin")) {
-            config.set("sync.syncOnJoin", false);
-        }
-        
-        // 如果沒有明確設置 syncOnLeave，則設為 false（新的安全默認值）
-        if (!config.contains("sync.syncOnLeave")) {
-            config.set("sync.syncOnLeave", false);
-        }
-        
-        plugin.getLogger().info("已將自動同步設置更新為更安全的默認值");
+        configManager.loadConfig();
+        plugin.getLogger().info("配置文件通過Common模組載入完成");
     }
     
     public void saveConfig() {
-        try {
-            config.save(configFile);
-        } catch (IOException e) {
-            plugin.getLogger().severe("Failed to save configuration: " + e.getMessage());
-        }
+        configManager.saveConfig();
     }
     
     public void reloadConfig() {
-        config = YamlConfiguration.loadConfiguration(configFile);
+        configManager.loadConfig();
     }
     
-    // Database configuration
+    // Database configuration - 委託給Common模組
     public String getDatabaseHost() {
-        return config.getString("database.host", "localhost");
+        return configManager.getString("database.host", "localhost");
     }
     
     public int getDatabasePort() {
-        return config.getInt("database.port", 3306);
+        return configManager.getInt("database.port", 3306);
     }
     
     public String getDatabaseName() {
-        return config.getString("database.database", "inventory_bridge");
+        return configManager.getString("database.database", "inventory_bridge");
     }
     
     public String getDatabaseUsername() {
-        return config.getString("database.username", "minecraft");
+        return configManager.getString("database.username", "minecraft");
     }
     
     public String getDatabasePassword() {
-        return config.getString("database.password", "password");
+        return configManager.getString("database.password", "password");
     }
     
     public String getTablePrefix() {
-        return config.getString("database.tablePrefix", "ib_");
+        return configManager.getString("database.tablePrefix", "ib_");
     }
     
     public int getMaxPoolSize() {
-        return config.getInt("database.maxPoolSize", 10);
+        return configManager.getInt("database.maxPoolSize", 10);
     }
     
     public int getConnectionTimeout() {
-        return config.getInt("database.connectionTimeout", 30000);
+        return configManager.getInt("database.connectionTimeout", 30000);
     }
     
     public boolean useSSL() {
-        return config.getBoolean("database.useSSL", false);
+        return configManager.getBoolean("database.useSSL", false);
     }
     
-    // Sync configuration
+    // Sync configuration - 委託給Common模組
     public boolean isAutoSyncEnabled() {
-        return config.getBoolean("sync.enableAutoSync", true);
+        return configManager.getBoolean("sync.enableAutoSync", true);
     }
     
     public int getSyncIntervalTicks() {
-        return config.getInt("sync.syncIntervalTicks", 200);
+        return configManager.getInt("sync.syncIntervalTicks", 200);
     }
     
     public boolean isSyncOnJoin() {
-        return config.getBoolean("sync.syncOnJoin", true);
+        return configManager.getBoolean("sync.syncOnJoin", true);
     }
     
     public boolean isSyncOnLeave() {
-        return config.getBoolean("sync.syncOnLeave", true);
+        return configManager.getBoolean("sync.syncOnLeave", true);
     }
     
     public boolean isSyncEnderChest() {
-        return config.getBoolean("sync.syncEnderChest", true);
+        return configManager.getBoolean("sync.syncEnderChest", true);
     }
     
     public boolean isSyncExperience() {
-        return config.getBoolean("sync.syncExperience", true);
+        return configManager.getBoolean("sync.syncExperience", true);
     }
     
     public boolean isSyncHealth() {
-        return config.getBoolean("sync.syncHealth", false);
+        return configManager.getBoolean("sync.syncHealth", false);
     }
     
     public boolean isSyncHunger() {
-        return config.getBoolean("sync.syncHunger", false);
+        return configManager.getBoolean("sync.syncHunger", false);
     }
     
     public String getServerId() {
-        return config.getString("sync.serverId", "server1");
+        return configManager.getString("sync.serverId", "server1");
     }
     
-    // Compatibility configuration
+    // Compatibility configuration - 委託給Common模組
     public boolean isLegacySupportEnabled() {
-        return config.getBoolean("compatibility.enableLegacySupport", true);
+        return configManager.getBoolean("compatibility.enableLegacySupport", true);
     }
     
     public boolean isConvertOldItems() {
-        return config.getBoolean("compatibility.convertOldItems", true);
+        return configManager.getBoolean("compatibility.convertOldItems", true);
     }
     
     public boolean isPreserveCustomModelData() {
-        return config.getBoolean("compatibility.preserveCustomModelData", true);
+        return configManager.getBoolean("compatibility.preserveCustomModelData", true);
     }
     
     public boolean isHandleBundles() {
-        return config.getBoolean("compatibility.handleBundles", true);
+        return configManager.getBoolean("compatibility.handleBundles", true);
     }
     
     public boolean isHandleCopperOxidation() {
-        return config.getBoolean("compatibility.handleCopperOxidation", true);
+        return configManager.getBoolean("compatibility.handleCopperOxidation", true);
     }
     
     public boolean isHandleResinItems() {
-        return config.getBoolean("compatibility.handleResinItems", true);
+        return configManager.getBoolean("compatibility.handleResinItems", true);
+    }
+    
+    public boolean isHandleGhastItems() {
+        return configManager.getBoolean("compatibility.handleGhastItems", true);
+    }
+    
+    public boolean isHandleNewMusicDiscs() {
+        return configManager.getBoolean("compatibility.handleNewMusicDiscs", true);
     }
     
     public String getMinecraftVersion() {
-        return config.getString("compatibility.minecraftVersion", "1.21.8");
+        return configManager.getString("compatibility.minecraftVersion", "1.21.8");
+    }
+    
+    // 內部訪問Common的ConfigurationManager (供DatabaseManager使用)
+    public ConfigurationManager getConfigurationManager() {
+        return configManager;
     }
 }

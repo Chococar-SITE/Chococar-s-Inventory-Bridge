@@ -4,11 +4,14 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.BundleContentsComponent;
 import net.minecraft.component.type.CustomModelDataComponent;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.Identifier;
 import site.chococar.inventorybridge.common.compatibility.ItemMappings;
@@ -161,7 +164,7 @@ public class FabricItemSerializer {
                 
                 // 應用描述
                 if (componentsJson.has("lore")) {
-                    List<String> loreStrings = GSON.fromJson(componentsJson.get("lore"), List.class);
+                    List<String> loreStrings = GSON.fromJson(componentsJson.get("lore"), new TypeToken<List<String>>(){}.getType());
                     List<net.minecraft.text.Text> loreTexts = loreStrings.stream()
                             .map(net.minecraft.text.Text::literal)
                             .map(text -> (net.minecraft.text.Text) text)
@@ -174,7 +177,7 @@ public class FabricItemSerializer {
                 if (componentsJson.has("bundle_contents") && itemStack.getItem().toString().contains("bundle")) {
                     JsonObject bundleJson = componentsJson.getAsJsonObject("bundle_contents");
                     if (bundleJson.has("items")) {
-                        List<String> itemStrings = GSON.fromJson(bundleJson.get("items"), List.class);
+                        List<String> itemStrings = GSON.fromJson(bundleJson.get("items"), new TypeToken<List<String>>(){}.getType());
                         List<ItemStack> bundleItems = itemStrings.stream()
                                 .map(FabricItemSerializer::deserializeItemStack)
                                 .filter(stack -> !stack.isEmpty())
@@ -244,5 +247,48 @@ public class FabricItemSerializer {
         } catch (Exception e) {
             ChococarsInventoryBridgeFabric.getLogger().error("反序列化背包失敗", e);
         }
+    }
+    
+    /**
+     * 序列化NBT格式的物品清單 (用於離線玩家檔案讀取)
+     */
+    public static String serializeNbtList(NbtList nbtList) {
+        if (nbtList == null || nbtList.isEmpty()) {
+            return "[]";
+        }
+        
+        JsonObject json = new JsonObject();
+        json.addProperty("size", 41); // 預設玩家背包大小 (9*4 + 5 裝備槽)
+        json.addProperty("minecraft_version", CURRENT_VERSION);
+        json.addProperty("data_version", CURRENT_DATA_VERSION);
+        
+        JsonObject itemsJson = new JsonObject();
+        
+        for (int i = 0; i < nbtList.size(); i++) {
+            try {
+                NbtCompound itemNbt = nbtList.getCompound(i);
+                if (itemNbt != null && !itemNbt.isEmpty()) {
+                    // 讀取槽位
+                    int slot = itemNbt.getByte("Slot") & 255; // 無符號字節
+                    
+                    // 創建ItemStack並序列化
+                    var optionalItemStack = ItemStack.fromNbt(ChococarsInventoryBridgeFabric.getCurrentRegistryManager(), itemNbt);
+                    if (optionalItemStack.isPresent()) {
+                        ItemStack itemStack = optionalItemStack.get();
+                        if (!itemStack.isEmpty()) {
+                            String serializedItem = serializeItemStack(itemStack);
+                            if (serializedItem != null) {
+                                itemsJson.addProperty(String.valueOf(slot), serializedItem);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                ChococarsInventoryBridgeFabric.getLogger().warn("序列化NBT物品失敗 (索引 " + i + "): " + e.getMessage());
+            }
+        }
+        
+        json.add("items", itemsJson);
+        return GSON.toJson(json);
     }
 }

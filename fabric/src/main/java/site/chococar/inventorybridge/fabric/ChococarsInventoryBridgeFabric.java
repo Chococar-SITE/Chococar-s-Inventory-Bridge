@@ -4,6 +4,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.registry.DynamicRegistryManager;
 import net.minecraft.server.MinecraftServer;
 import site.chococar.inventorybridge.fabric.config.FabricConfigManager;
 import site.chococar.inventorybridge.fabric.database.FabricDatabaseManager;
@@ -164,5 +165,14 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
             LOGGER.error("請檢查配置文件格式是否正確");
             return false;
         }
+    }
+    
+    /**
+     * 獲取當前伺服器的註冊管理器 (用於物品序列化)
+     */
+    public static DynamicRegistryManager getCurrentRegistryManager() {
+        return FabricInventorySyncManager.getServerInstance() != null 
+            ? FabricInventorySyncManager.getServerInstance().getRegistryManager()
+            : null;
     }
 }

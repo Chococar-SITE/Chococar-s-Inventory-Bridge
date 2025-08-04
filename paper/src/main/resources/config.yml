@@ -25,10 +25,10 @@ sync:
   syncIntervalTicks: 200
   
   # Sync player inventory when joining the server
-  syncOnJoin: false
+  syncOnJoin: true
   
   # Sync player inventory when leaving the server
-  syncOnLeave: false
+  syncOnLeave: true
   
   # Sync ender chest contents
   syncEnderChest: true

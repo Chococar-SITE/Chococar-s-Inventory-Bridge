@@ -4,6 +4,12 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.craftbukkit.v1_21_R3.inventory.CraftItemStack;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtAccounter;
+import java.io.FileInputStream;
 import site.chococar.inventorybridge.paper.config.PaperConfigManager;
 import site.chococar.inventorybridge.paper.database.PaperDatabaseManager;
 import site.chococar.inventorybridge.paper.database.PaperInventoryData;
@@ -28,13 +34,61 @@ public class PaperInventorySyncManager {
     }
     
     public void onPlayerJoin(Player player) {
-        // Auto-load disabled for safety to prevent timing issues and item loss
-        logger.info("Player " + player.getName() + " joined - auto-load disabled for safety. Use '/ib sync load' to manually load inventory.");
+        PaperConfigManager config = getConfigManager();
+        if (!config.isSyncOnJoin()) {
+            return;
+        }
+        
+        UUID playerUuid = player.getUniqueId();
+        
+        if (syncInProgress.getOrDefault(playerUuid, false)) {
+            return;
+        }
+        
+        syncInProgress.put(playerUuid, true);
+        
+        CompletableFuture.runAsync(() -> {
+            try {
+                loadPlayerInventory(player);
+                databaseManager.logSync(playerUuid, config.getServerId(), "JOIN", "SUCCESS", null);
+                logger.info("已為玩家 " + player.getName() + " 自動載入背包");
+            } catch (Exception e) {
+                databaseManager.logSync(playerUuid, config.getServerId(), "JOIN", "FAILED", e.getMessage());
+                logger.severe("玩家 " + player.getName() + " 自動載入失敗: " + e.getMessage());
+            } finally {
+                syncInProgress.put(playerUuid, false);
+                lastSyncTimes.put(playerUuid, System.currentTimeMillis());
+            }
+        });
     }
     
     public void onPlayerLeave(Player player) {
-        // Auto-save disabled for safety to prevent timing issues and item loss
-        logger.info("Player " + player.getName() + " left - auto-save disabled for safety. Use '/ib sync save' to manually save inventory.");
+        PaperConfigManager config = getConfigManager();
+        if (!config.isSyncOnLeave()) {
+            return;
+        }
+        
+        UUID playerUuid = player.getUniqueId();
+        
+        if (syncInProgress.getOrDefault(playerUuid, false)) {
+            return;
+        }
+        
+        syncInProgress.put(playerUuid, true);
+        
+        CompletableFuture.runAsync(() -> {
+            try {
+                savePlayerInventory(player);
+                databaseManager.logSync(playerUuid, config.getServerId(), "LEAVE", "SUCCESS", null);
+                logger.info("已為玩家 " + player.getName() + " 自動保存背包");
+            } catch (Exception e) {
+                databaseManager.logSync(playerUuid, config.getServerId(), "LEAVE", "FAILED", e.getMessage());
+                logger.severe("玩家 " + player.getName() + " 自動保存失敗: " + e.getMessage());
+            } finally {
+                syncInProgress.put(playerUuid, false);
+                lastSyncTimes.put(playerUuid, System.currentTimeMillis());
+            }
+        });
     }
     
     public void manualSync(Player player, boolean save) {
@@ -56,10 +110,10 @@ public class PaperInventorySyncManager {
                     loadPlayerInventory(player);
                 }
                 databaseManager.logSync(playerUuid, config.getServerId(), "MANUAL", "SUCCESS", null);
-                logger.info("Manual " + (save ? "save" : "load") + " completed for player " + player.getName());
+                logger.info("玩家 " + player.getName() + " 手動" + (save ? "保存" : "載入") + "完成");
             } catch (Exception e) {
                 databaseManager.logSync(playerUuid, config.getServerId(), "MANUAL", "FAILED", e.getMessage());
-                logger.severe("Manual " + (save ? "save" : "load") + " failed for player " + player.getName() + ": " + e.getMessage());
+                logger.severe("玩家 " + player.getName() + " 手動" + (save ? "保存" : "載入") + "失敗: " + e.getMessage());
             } finally {
                 syncInProgress.put(playerUuid, false);
                 lastSyncTimes.put(playerUuid, System.currentTimeMillis());
@@ -107,7 +161,7 @@ public class PaperInventorySyncManager {
         PaperInventoryData data = databaseManager.loadInventory(player.getUniqueId(), config.getServerId());
         
         if (data == null) {
-            logger.info("No saved inventory found for player " + player.getName());
+            logger.info("玩家 " + player.getName() + " 沒有已保存的背包資料");
             return;
         }
         
@@ -270,9 +324,35 @@ public class PaperInventorySyncManager {
                         hunger = onlinePlayer.getFoodLevel();
                     }
                 } else {
-                    // 玩家離線，創建初始記錄以標記玩家存在
-                    inventoryData = createEmptyInventoryData();
-                    logger.info("玩家 " + offlinePlayer.getName() + " (" + playerUuid + ") 離線，創建初始資料庫記錄");
+                    // 玩家離線，嘗試從NBT檔案讀取真實背包資料
+                    try {
+                        PaperNBTInventoryData nbtData = readPlayerNBTData(playerFile);
+                        if (nbtData != null) {
+                            inventoryData = nbtData.inventoryData;
+                            if (config.isSyncEnderChest() && nbtData.enderChestData != null) {
+                                enderChestData = nbtData.enderChestData;
+                            }
+                            if (config.isSyncExperience()) {
+                                experience = nbtData.experience;
+                                experienceLevel = nbtData.experienceLevel;
+                            }
+                            if (config.isSyncHealth()) {
+                                health = nbtData.health;
+                            }
+                            if (config.isSyncHunger()) {
+                                hunger = nbtData.hunger;
+                            }
+                            logger.info("從檔案讀取玩家 " + playerUuid + " 的離線資料並同步至資料庫");
+                        } else {
+                            logger.warning("無法讀取玩家 " + playerUuid + " 的檔案資料，跳過同步");
+                            databaseManager.logSync(playerUuid, config.getServerId(), "INITIAL_SYNC", "FAILED", "無法讀取玩家檔案資料");
+                            return false;
+                        }
+                    } catch (Exception nbtException) {
+                        logger.warning("讀取玩家 " + playerUuid + " 離線檔案失敗，跳過同步: " + nbtException.getMessage());
+                        databaseManager.logSync(playerUuid, config.getServerId(), "INITIAL_SYNC", "FAILED", "檔案讀取異常: " + nbtException.getMessage());
+                        return false;
+                    }
                 }
                 
                 databaseManager.saveInventory(
@@ -292,21 +372,9 @@ public class PaperInventorySyncManager {
                 return true;
                 
             } catch (Exception e) {
-                logger.warning("讀取玩家 " + playerUuid + " 的資料時發生錯誤，使用預設值: " + e.getMessage());
-                
-                // 發生錯誤時，至少創建一個基本記錄
-                databaseManager.saveInventory(
-                    playerUuid,
-                    config.getServerId(),
-                    createEmptyInventoryData(),
-                    null,
-                    0, 0, 20.0, 20,
-                    config.getMinecraftVersion(),
-                    4082
-                );
-                
-                databaseManager.logSync(playerUuid, config.getServerId(), "INITIAL_SYNC", "PARTIAL", e.getMessage());
-                return true;
+                logger.warning("讀取玩家 " + playerUuid + " 的資料時發生錯誤，跳過同步: " + e.getMessage());
+                databaseManager.logSync(playerUuid, config.getServerId(), "INITIAL_SYNC", "FAILED", e.getMessage());
+                return false;
             }
             
         } catch (Exception e) {
@@ -321,5 +389,119 @@ public class PaperInventorySyncManager {
         // 創建一個空的物品欄資料字串
         // 這裡使用簡化的空物品欄表示
         return "[]"; // 空的 JSON 陣列表示空物品欄
+    }
+    
+    /**
+     * NBT庫存資料結構
+     */
+    private static class PaperNBTInventoryData {
+        final String inventoryData;
+        final String enderChestData;
+        final int experience;
+        final int experienceLevel;
+        final double health;
+        final int hunger;
+        
+        PaperNBTInventoryData(String inventoryData, String enderChestData, 
+                            int experience, int experienceLevel, 
+                            double health, int hunger) {
+            this.inventoryData = inventoryData;
+            this.enderChestData = enderChestData;
+            this.experience = experience;
+            this.experienceLevel = experienceLevel;
+            this.health = health;
+            this.hunger = hunger;
+        }
+    }
+    
+    /**
+     * 從NBT檔案讀取玩家資料 (Paper實現)
+     */
+    private PaperNBTInventoryData readPlayerNBTData(java.io.File playerFile) {
+        try {
+            // 使用Paper的NBT API讀取玩家檔案
+            CompoundTag playerData = NbtIo.readCompressed(new FileInputStream(playerFile), NbtAccounter.unlimitedHeap());
+            
+            if (playerData == null) {
+                return null;
+            }
+            
+            String inventoryData = "[]";
+            String enderChestData = null;
+            int experience = 0;
+            int experienceLevel = 0;
+            double health = 20.0;
+            int hunger = 20;
+            
+            // 讀取背包資料
+            if (playerData.contains("Inventory", 9)) {
+                ListTag inventoryList = playerData.getList("Inventory", 10);
+                inventoryData = serializeNbtListToPaper(inventoryList);
+            }
+            
+            // 讀取終界箱資料
+            if (playerData.contains("EnderItems", 9)) {
+                ListTag enderList = playerData.getList("EnderItems", 10);
+                enderChestData = serializeNbtListToPaper(enderList);
+            }
+            
+            // 讀取經驗值
+            if (playerData.contains("XpTotal")) {
+                experience = playerData.getInt("XpTotal");
+            }
+            if (playerData.contains("XpLevel")) {
+                experienceLevel = playerData.getInt("XpLevel");
+            }
+            
+            // 讀取血量
+            if (playerData.contains("Health")) {
+                health = playerData.getFloat("Health");
+            }
+            
+            // 讀取飢餓值
+            if (playerData.contains("foodLevel")) {
+                hunger = playerData.getInt("foodLevel");
+            }
+            
+            return new PaperNBTInventoryData(inventoryData, enderChestData, 
+                                           experience, experienceLevel, 
+                                           health, hunger);
+            
+        } catch (Exception e) {
+            logger.warning("讀取NBT檔案失敗: " + e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * 將NBT清單序列化為Paper格式的字串
+     */
+    private String serializeNbtListToPaper(ListTag nbtList) {
+        if (nbtList == null || nbtList.isEmpty()) {
+            return "[]";
+        }
+        
+        try {
+            ItemStack[] items = new ItemStack[41]; // 預設背包大小
+            
+            for (int i = 0; i < nbtList.size(); i++) {
+                CompoundTag itemNbt = nbtList.getCompound(i);
+                if (itemNbt != null && !itemNbt.isEmpty()) {
+                    // 讀取槽位
+                    int slot = itemNbt.getByte("Slot") & 255;
+                    if (slot < items.length) {
+                        // 使用Paper/CraftBukkit API轉換NBT到ItemStack
+                        net.minecraft.world.item.ItemStack nmsStack = net.minecraft.world.item.ItemStack.of(itemNbt);
+                        items[slot] = CraftItemStack.asBukkitCopy(nmsStack);
+                    }
+                }
+            }
+            
+            return PaperItemSerializer.serializeInventoryArray(items);
+            
+        } catch (Exception e) {
+            logger.warning("序列化NBT清單失敗: " + e.getMessage());
+            return "[]";
+        }
     }
 }

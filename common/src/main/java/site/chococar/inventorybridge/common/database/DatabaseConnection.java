@@ -90,6 +90,7 @@ public class DatabaseConnection {
         createInventoriesTable();
         createVersionMappingsTable();
         createSyncLogTable();
+        migrateSyncLogTable();
     }
     
     private void createInventoriesTable() {
@@ -148,6 +149,25 @@ public class DatabaseConnection {
             """, tablePrefix);
         
         executeUpdate(sql, "同步日誌表");
+    }
+    
+    private void migrateSyncLogTable() {
+        // 檢查並更新sync_type ENUM以包含INITIAL_SYNC
+        String alterSql = String.format("""
+            ALTER TABLE `%ssync_log` 
+            MODIFY COLUMN `sync_type` ENUM('JOIN', 'LEAVE', 'MANUAL', 'AUTO', 'INITIAL_SYNC') NOT NULL
+            """, tablePrefix);
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(alterSql)) {
+            stmt.executeUpdate();
+            LOGGER.info("同步日誌表ENUM值遷移成功，已添加INITIAL_SYNC類型");
+        } catch (SQLException e) {
+            // 如果是新表或已經包含該值，則忽略錯誤
+            if (!e.getMessage().contains("Duplicate value") && !e.getMessage().contains("Data truncation")) {
+                LOGGER.debug("同步日誌表ENUM遷移: {}", e.getMessage());
+            }
+        }
     }
     
     private void executeUpdate(String sql, String tableName) {
