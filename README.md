@@ -1,39 +1,22 @@
 # Chococar's Inventory Bridge（巧克車的背包橋接）
 
-一個全面的 Minecraft 1.21.X 背包同步解決方案，支援 Fabric 模組和 Paper 插件環境。此系統讓玩家能夠使用 MySQL 資料庫存儲在多個伺服器間保持背包同步，並具有完整的版本兼容性。
+一個全面的 Minecraft 1.21.4~1.21.8 背包同步解決方案，支援 Fabric 模組和 Paper 插件環境。此系統讓玩家能夠使用 MySQL 資料庫存儲在多個伺服器間保持背包同步，並具有完整的版本兼容性。
 
 ## 功能特色
 
 - **跨伺服器背包同步**：在多個 Minecraft 伺服器間同步玩家背包
 - **版本兼容性**：完全支援 Minecraft 1.21.X 版本（1.21 - 1.21.8）
 - **物品保存**：保持物品數據包括附魔、自定義模型數據和元數據
-- **束包支援**：處理 1.21.2+ 版本引入的束包物品
+- **束包支援**：處理 1.21.4+ 版本引入的束包物品
 - **向下兼容**：自動將較新物品轉換為舊版本的兼容替代品
 - **MySQL 資料庫**：穩固的資料庫存儲與連接池
 - **即時同步**：在玩家加入/離開時自動同步，具可配置選項
 - **手動控制**：管理員指令進行手動同步操作
 - **全面記錄**：詳細的同步日誌和錯誤追蹤
 
-## 支援的 Minecraft 版本
-
-- **Minecraft 1.21.8**（完整支援）
-- 僅限 Java 版
-- 需要 Java 21+
-
-![Build Status](https://github.com/chococar-site/inventory-bridge/workflows/Build%20Multi-Version%20JAR%20Files/badge.svg)
+![Build Status](https://github.com/chococar-site/Chococar-s-Inventory-Bridge/workflows/Build%20Multi-Version%20JAR%20Files/badge.svg)
 ![Release](https://img.shields.io/github/v/release/chococar-site/inventory-bridge)
 ![Downloads](https://img.shields.io/github/downloads/chococar-site/inventory-bridge/total)
-
-## 系統需求
-
-### Fabric 模組
-- Fabric Loader 0.16.9+
-- Fabric API 0.130.0+
-- Minecraft 1.21.8
-
-### Paper 插件
-- Paper 1.21.8+
-- Java 21+
 
 ### 資料庫
 - MySQL 8.0+ 或 MariaDB 10.5+
