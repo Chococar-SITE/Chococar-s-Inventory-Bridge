@@ -1,5 +1,10 @@
-# Chococar's Inventory Bridge - Fabric 模組配置
-# MySQL 資料庫配置
+# Chococar's Inventory Bridge Configuration
+# Configuration version: 2
+# Do not modify the version number manually!
+
+version: 2
+
+# MySQL Database Configuration
 database:
   host: "localhost"
   port: 3306
@@ -11,60 +16,60 @@ database:
   connectionTimeout: 30000
   useSSL: false
 
-# 同步設定
+# Synchronization Settings
 sync:
-  # 啟用自動同步
+  # Enable automatic synchronization
   enableAutoSync: true
   
-  # 同步間隔（tick為單位，20 tick = 1 秒）
+  # Sync interval in ticks (20 ticks = 1 second)
   syncIntervalTicks: 200
   
-  # 玩家加入伺服器時同步背包
-  syncOnJoin: true
+  # Sync player inventory when joining the server
+  syncOnJoin: false
   
-  # 玩家離開伺服器時同步背包
-  syncOnLeave: true
+  # Sync player inventory when leaving the server
+  syncOnLeave: false
   
-  # 同步終界箱內容
+  # Sync ender chest contents
   syncEnderChest: true
   
-  # 同步玩家經驗
+  # Sync player experience
   syncExperience: true
   
-  # 同步玩家生命值（不建議在 PvP 伺服器使用）
+  # Sync player health (not recommended for PvP servers)
   syncHealth: false
   
-  # 同步玩家飢餓值
+  # Sync player hunger
   syncHunger: false
   
-  # 多伺服器設置的唯一伺服器識別符
+  # Unique server identifier for multi-server setups
   serverId: "server1"
 
-# 版本兼容性設定
+# Version Compatibility Settings
 compatibility:
-  # 啟用對舊版 Minecraft 的支援
+  # Enable support for older Minecraft versions
   enableLegacySupport: true
   
-  # 在可能的情況下將舊物品轉換為新格式
+  # Convert old items to new format when possible
   convertOldItems: true
   
-  # 同步時保留自定義模型數據
+  # Preserve custom model data when syncing
   preserveCustomModelData: true
   
-  # 處理束包物品（1.21.2+）
+  # Handle bundle items (1.21.2+)
   handleBundles: true
   
-  # 處理銅製品氧化狀態
+  # Handle copper oxidation states
   handleCopperOxidation: true
   
-  # 處理樹脂物品（1.21.4+）
+  # Handle resin items (1.21.4+)
   handleResinItems: true
   
-  # 處理惡魂相關物品（1.21.6+）
+  # Handle ghast-related items (1.21.6+)
   handleGhastItems: true
   
-  # 處理新音樂唱片（1.21.6+、1.21.7+）
+  # Handle new music discs (1.21.6+, 1.21.7+)
   handleNewMusicDiscs: true
   
-  # 當前 Minecraft 版本
+  # Current Minecraft version
   minecraftVersion: "1.21.8"

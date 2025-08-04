@@ -1,4 +1,9 @@
 # Chococar's Inventory Bridge Configuration
+# Configuration version: 2
+# Do not modify the version number manually!
+
+version: 2
+
 # MySQL Database Configuration
 database:
   host: "localhost"

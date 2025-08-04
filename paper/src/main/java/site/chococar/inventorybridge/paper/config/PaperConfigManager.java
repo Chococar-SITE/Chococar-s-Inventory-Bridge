@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.IOException;
 
 public class PaperConfigManager {
+    private static final int CURRENT_CONFIG_VERSION = 2;
     private final ChococarsInventoryBridgePlugin plugin;
     private FileConfiguration config;
     private File configFile;
@@ -23,7 +24,50 @@ public class PaperConfigManager {
         }
         
         config = YamlConfiguration.loadConfiguration(configFile);
-        plugin.getLogger().info("Configuration loaded successfully");
+        
+        // 檢查配置版本
+        int configVersion = config.getInt("version", 1);
+        
+        if (configVersion < CURRENT_CONFIG_VERSION) {
+            plugin.getLogger().info("檢測到舊版配置文件 (版本 " + configVersion + "，當前版本 " + CURRENT_CONFIG_VERSION + ")，開始遷移...");
+            migrateConfig(configVersion);
+            plugin.getLogger().info("配置文件遷移完成");
+        } else if (configVersion > CURRENT_CONFIG_VERSION) {
+            plugin.getLogger().warning("配置文件版本 (" + configVersion + ") 高於當前支持版本 (" + CURRENT_CONFIG_VERSION + ")，可能存在兼容性問題");
+        } else {
+            plugin.getLogger().info("配置文件加載成功 (版本 " + configVersion + ")");
+        }
+    }
+    
+    private void migrateConfig(int fromVersion) {
+        plugin.getLogger().info("開始從版本 " + fromVersion + " 遷移配置到版本 " + CURRENT_CONFIG_VERSION);
+        
+        if (fromVersion == 1) {
+            migrateFromV1ToV2();
+        }
+        
+        // 更新版本號
+        config.set("version", CURRENT_CONFIG_VERSION);
+        saveConfig();
+        
+        plugin.getLogger().info("配置遷移完成，已保留所有自定義設置");
+    }
+    
+    private void migrateFromV1ToV2() {
+        // 版本1到版本2的遷移邏輯
+        // 主要是將自動同步默認改為關閉，並添加版本號
+        
+        // 如果沒有明確設置 syncOnJoin，則設為 false（新的安全默認值）
+        if (!config.contains("sync.syncOnJoin")) {
+            config.set("sync.syncOnJoin", false);
+        }
+        
+        // 如果沒有明確設置 syncOnLeave，則設為 false（新的安全默認值）
+        if (!config.contains("sync.syncOnLeave")) {
+            config.set("sync.syncOnLeave", false);
+        }
+        
+        plugin.getLogger().info("已將自動同步設置更新為更安全的默認值");
     }
     
     public void saveConfig() {

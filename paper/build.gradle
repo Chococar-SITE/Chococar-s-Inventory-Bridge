@@ -59,6 +59,9 @@ tasks {
     }
     
     jar {
+        // 依賴於 common 模組的 jar 任務
+        dependsOn ':common:jar'
+        
         // 處理重複文件策略
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
         
