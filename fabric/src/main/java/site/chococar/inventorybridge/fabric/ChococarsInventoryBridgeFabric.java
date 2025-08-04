@@ -4,7 +4,6 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 import site.chococar.inventorybridge.fabric.config.FabricConfigManager;
 import site.chococar.inventorybridge.fabric.database.FabricDatabaseManager;
@@ -136,9 +135,6 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
             // 重新載入配置文件
             configManager.loadConfig();
             LOGGER.info("配置文件重新載入成功");
-            
-            // 重新初始化資料庫連接（使用新配置）
-            boolean dbReconnected = databaseManager.reconnect();
             
             // 重新初始化同步管理器
             syncManager = new FabricInventorySyncManager(databaseManager.getDatabaseConnection(), configManager.getConfigurationManager());
