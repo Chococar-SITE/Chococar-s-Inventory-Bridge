@@ -333,17 +333,7 @@ jobs:
         API_URL="https://api.modrinth.com/v2/project/fabric-api/version?game_versions=[\"$MC_VERSION\"]&loaders=[\"fabric\"]"
         echo "🔍 查詢 API: $API_URL"
         
-        FABRIC_API_URL=$(curl -s "$API_URL" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    if data and len(data) > 0:
-        print(data[0]['files'][0]['url'])
-    else:
-        print('')
-except:
-    print('')
-")
+        FABRIC_API_URL=$(curl -s "$API_URL" | python3 -c 'import sys, json; data = json.load(sys.stdin); print(data[0]["files"][0]["url"] if data and len(data) > 0 else "")' 2>/dev/null || echo "")
         
         if [ -n "$FABRIC_API_URL" ]; then
           echo "✅ 找到 Fabric API 下載連結: $FABRIC_API_URL"
