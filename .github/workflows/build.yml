@@ -465,18 +465,37 @@ jobs:
           exit 1
         fi
         
-        # 運行 60 秒
+        # 運行 60 秒並顯示即時日誌
         echo "🎮 伺服器正常運行中，將持續 60 秒..."
-        for i in {1..60}; do
-          if ! kill -0 $SERVER_PID 2>/dev/null; then
-            echo "❌ 伺服器意外停止"
-            echo "📋 伺服器日誌："
-            cat server.log
-            exit 1
-          fi
-          echo "⏰ 運行中... ($i/60 秒)"
-          sleep 1
-        done
+        echo "📋 即時伺服器日誌："
+        
+        # 在背景監控伺服器狀態
+        (
+          for i in {1..60}; do
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "❌ 伺服器意外停止"
+              exit 1
+            fi
+            sleep 1
+          done
+        ) &
+        MONITOR_PID=$!
+        
+        # 顯示即時日誌，直到監控結束
+        tail -f server.log &
+        TAIL_PID=$!
+        
+        # 等待監控完成
+        wait $MONITOR_PID
+        MONITOR_EXIT_CODE=$?
+        
+        # 停止 tail
+        kill $TAIL_PID 2>/dev/null || true
+        
+        if [ $MONITOR_EXIT_CODE -ne 0 ]; then
+          echo "❌ 伺服器運行失敗"
+          exit 1
+        fi
         
         # 優雅關閉伺服器
         echo "🛑 正在關閉伺服器..."
@@ -678,18 +697,37 @@ jobs:
           exit 1
         fi
         
-        # 運行 60 秒
+        # 運行 60 秒並顯示即時日誌
         echo "🎮 Paper 伺服器正常運行中，將持續 60 秒..."
-        for i in {1..60}; do
-          if ! kill -0 $SERVER_PID 2>/dev/null; then
-            echo "❌ Paper 伺服器意外停止"
-            echo "📋 伺服器日誌："
-            cat server.log
-            exit 1
-          fi
-          echo "⏰ 運行中... ($i/60 秒)"
-          sleep 1
-        done
+        echo "📋 即時 Paper 伺服器日誌："
+        
+        # 在背景監控伺服器狀態
+        (
+          for i in {1..60}; do
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "❌ Paper 伺服器意外停止"
+              exit 1
+            fi
+            sleep 1
+          done
+        ) &
+        MONITOR_PID=$!
+        
+        # 顯示即時日誌，直到監控結束
+        tail -f server.log &
+        TAIL_PID=$!
+        
+        # 等待監控完成
+        wait $MONITOR_PID
+        MONITOR_EXIT_CODE=$?
+        
+        # 停止 tail
+        kill $TAIL_PID 2>/dev/null || true
+        
+        if [ $MONITOR_EXIT_CODE -ne 0 ]; then
+          echo "❌ Paper 伺服器運行失敗"
+          exit 1
+        fi
         
         # 優雅關閉伺服器
         echo "🛑 正在關閉 Paper 伺服器..."

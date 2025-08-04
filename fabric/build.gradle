@@ -32,8 +32,11 @@ dependencies {
     implementation project(':common')
     include project(':common')
     
-    // 包含 SnakeYAML (通過 common 模組的傳遞依賴)
+    // 包含 common 模組的所有依賴
     include 'org.yaml:snakeyaml:2.0'
+    include 'mysql:mysql-connector-java:8.0.33'
+    include 'com.zaxxer:HikariCP:5.0.1'
+    include 'com.google.code.gson:gson:2.10.1'
     
     // 測試依賴
     testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'

@@ -9,6 +9,11 @@ dependencies {
     // YAML 配置處理
     api 'org.yaml:snakeyaml:2.0'
     
+    // 資料庫相關
+    api 'mysql:mysql-connector-java:8.0.33'
+    api 'com.zaxxer:HikariCP:5.0.1'
+    api 'com.google.code.gson:gson:2.10.1'
+    
     // 測試依賴
     testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'
     testImplementation 'org.mockito:mockito-core:5.1.1'

@@ -26,17 +26,8 @@ dependencies {
     
     paperweight.paperDevBundle("1.21.4-R0.1-SNAPSHOT")
 
-    // 共通模組
+    // 共通模組 (包含所有必要依賴)
     implementation project(':common')
-    
-    // MySQL connector
-    implementation 'mysql:mysql-connector-java:8.0.33'
-    
-    // JSON handling
-    implementation 'com.google.code.gson:gson:2.10.1'
-    
-    // Connection pooling
-    implementation 'com.zaxxer:HikariCP:5.0.1'
 }
 
 tasks {
