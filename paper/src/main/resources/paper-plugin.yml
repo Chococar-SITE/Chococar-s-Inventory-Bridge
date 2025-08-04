@@ -20,9 +20,3 @@ permissions:
     description: Manually sync inventory
     default: true
 
-commands:
-  inventorybridge:
-    description: Main command for Inventory Bridge
-    usage: /inventorybridge <subcommand>
-    aliases: [ib, invbridge]
-    permission: chococars.inventorybridge.admin

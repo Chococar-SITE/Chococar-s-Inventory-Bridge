@@ -38,9 +38,28 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
             getServer().getPluginManager().registerEvents(this, this);
             getLogger().info("Events registered");
             
-            // Register commands
-            getCommand("inventorybridge").setExecutor(new InventoryBridgeCommand(this));
-            getLogger().info("Commands registered");
+            // Register commands using reflection for Paper compatibility
+            try {
+                InventoryBridgeCommand commandExecutor = new InventoryBridgeCommand(this);
+                
+                // Use reflection to create PluginCommand since constructor is not public
+                java.lang.reflect.Constructor<?> constructor = org.bukkit.command.PluginCommand.class.getDeclaredConstructor(String.class, org.bukkit.plugin.Plugin.class);
+                constructor.setAccessible(true);
+                org.bukkit.command.PluginCommand inventoryBridgeCmd = (org.bukkit.command.PluginCommand) constructor.newInstance("inventorybridge", this);
+                
+                inventoryBridgeCmd.setDescription("Main command for Inventory Bridge");
+                inventoryBridgeCmd.setUsage("/inventorybridge <subcommand>");
+                inventoryBridgeCmd.setAliases(java.util.Arrays.asList("ib", "invbridge"));
+                inventoryBridgeCmd.setPermission("chococars.inventorybridge.admin");
+                inventoryBridgeCmd.setExecutor(commandExecutor);
+                inventoryBridgeCmd.setTabCompleter(commandExecutor);
+                
+                this.getServer().getCommandMap().register("inventorybridge", inventoryBridgeCmd);
+                getLogger().info("Commands registered successfully");
+            } catch (Exception e) {
+                getLogger().severe("Failed to register commands: " + e.getMessage());
+                e.printStackTrace();
+            }
             
             // Scan and sync existing player files if database is available
             if (!databaseManager.isStandbyMode()) {

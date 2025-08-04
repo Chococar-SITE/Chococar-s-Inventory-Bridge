@@ -138,7 +138,7 @@ public class DatabaseConnection {
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
                 `player_uuid` VARCHAR(36) NOT NULL,
                 `server_id` VARCHAR(64) NOT NULL,
-                `sync_type` ENUM('JOIN', 'LEAVE', 'MANUAL', 'AUTO') NOT NULL,
+                `sync_type` ENUM('JOIN', 'LEAVE', 'MANUAL', 'AUTO', 'INITIAL_SYNC') NOT NULL,
                 `status` ENUM('SUCCESS', 'FAILED', 'PARTIAL') NOT NULL,
                 `error_message` TEXT,
                 `sync_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

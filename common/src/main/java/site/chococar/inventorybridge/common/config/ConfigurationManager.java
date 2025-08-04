@@ -180,8 +180,8 @@ public class ConfigurationManager {
         Map<String, Object> sync = new LinkedHashMap<>();
         sync.put("enableAutoSync", true);
         sync.put("syncIntervalTicks", 200);
-        sync.put("syncOnJoin", false); // 默認關閉自動同步，改為手動
-        sync.put("syncOnLeave", false); // 默認關閉自動同步，改為手動
+        sync.put("syncOnJoin", true); // 玩家加入時自動同步
+        sync.put("syncOnLeave", true); // 玩家離開時自動同步
         sync.put("syncEnderChest", true);
         sync.put("syncExperience", true);
         sync.put("syncHealth", false);

@@ -10,7 +10,7 @@ public class FabricConfigManager {
     private final Path configPath;
     
     public FabricConfigManager() {
-        this.configPath = FabricLoader.getInstance().getConfigDir().resolve("config.yml");
+        this.configPath = FabricLoader.getInstance().getConfigDir().resolve("chococars-inventory-bridge.yml");
         this.configManager = new ConfigurationManager(configPath);
     }
     
@@ -69,11 +69,11 @@ public class FabricConfigManager {
     }
     
     public boolean isSyncOnJoin() {
-        return configManager.getBoolean("sync.syncOnJoin", false);
+        return configManager.getBoolean("sync.syncOnJoin", true);
     }
     
     public boolean isSyncOnLeave() {
-        return configManager.getBoolean("sync.syncOnLeave", false);
+        return configManager.getBoolean("sync.syncOnLeave", true);
     }
     
     public boolean isSyncEnderChest() {
