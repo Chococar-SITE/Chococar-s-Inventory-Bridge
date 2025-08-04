@@ -20,24 +20,35 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
     public void onEnable() {
         getLogger().info("Enabling Chococar's Inventory Bridge Plugin");
         
-        // Initialize configuration
-        configManager = new PaperConfigManager(this);
-        configManager.loadConfig();
-        
-        // Initialize database connection
-        databaseManager = new PaperDatabaseManager(configManager);
-        databaseManager.initialize();
-        
-        // Initialize sync manager
-        syncManager = new PaperInventorySyncManager(databaseManager);
-        
-        // Register events
-        getServer().getPluginManager().registerEvents(this, this);
-        
-        // Register commands
-        getCommand("inventorybridge").setExecutor(new InventoryBridgeCommand(this));
-        
-        getLogger().info("Chococar's Inventory Bridge Plugin enabled successfully");
+        try {
+            // Initialize configuration
+            configManager = new PaperConfigManager(this);
+            configManager.loadConfig();
+            getLogger().info("Configuration loaded successfully");
+            
+            // Initialize database connection
+            databaseManager = new PaperDatabaseManager(configManager);
+            databaseManager.initialize();
+            getLogger().info("Database manager initialized");
+            
+            // Initialize sync manager
+            syncManager = new PaperInventorySyncManager(databaseManager);
+            getLogger().info("Sync manager initialized");
+            
+            // Register events
+            getServer().getPluginManager().registerEvents(this, this);
+            getLogger().info("Events registered");
+            
+            // Register commands
+            getCommand("inventorybridge").setExecutor(new InventoryBridgeCommand(this));
+            getLogger().info("Commands registered");
+            
+            getLogger().info("Chococar's Inventory Bridge Plugin enabled successfully");
+        } catch (Exception e) {
+            getLogger().severe("Failed to enable plugin: " + e.getMessage());
+            e.printStackTrace();
+            getServer().getPluginManager().disablePlugin(this);
+        }
     }
     
     @Override

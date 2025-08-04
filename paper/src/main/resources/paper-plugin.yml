@@ -5,6 +5,9 @@ main: site.chococar.inventorybridge.paper.ChococarsInventoryBridgePlugin
 api-version: '${apiVersion}'
 authors: [ chococar.site ]
 website: https://chococar.site
+load: STARTUP
+depend: []
+softdepend: []
 
 permissions:
   chococars.inventorybridge.admin:
@@ -12,7 +15,7 @@ permissions:
     default: op
   chococars.inventorybridge.reload:
     description: Reload the plugin configuration
-    default: op
+    default: op  
   chococars.inventorybridge.sync:
     description: Manually sync inventory
     default: true

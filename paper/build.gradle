@@ -28,6 +28,12 @@ dependencies {
 
     // 共通模組 (包含所有必要依賴)
     implementation project(':common')
+    
+    // 直接依賴項
+    implementation 'mysql:mysql-connector-java:8.0.33'
+    implementation 'com.zaxxer:HikariCP:5.0.1'
+    implementation 'org.yaml:snakeyaml:2.0'
+    implementation 'org.slf4j:slf4j-api:2.0.7'
 }
 
 tasks {
@@ -44,11 +50,26 @@ tasks {
         def props = [
             version    : project.version,
             description: project.description,
-            apiVersion : "1.21.4"
+            apiVersion : "1.21"
         ]
         inputs.properties(props)
         filesMatching("paper-plugin.yml") {
             expand(props)
+        }
+    }
+    
+    jar {
+        // 包含 common 模組的類文件
+        from(project(':common').sourceSets.main.output) {
+            exclude 'META-INF/**'
+        }
+        
+        // 設置 Manifest
+        manifest {
+            attributes([
+                'Implementation-Title': project.name,
+                'Implementation-Version': project.version
+            ])
         }
     }
 }
