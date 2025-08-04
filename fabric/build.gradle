@@ -34,7 +34,7 @@ dependencies {
     
     // 包含 common 模組的所有依賴
     include 'org.yaml:snakeyaml:2.0'
-    include 'mysql:mysql-connector-java:8.0.33'
+    include 'com.mysql:mysql-connector-j:8.4.0'
     include 'com.zaxxer:HikariCP:5.0.1'
     include 'com.google.code.gson:gson:2.10.1'
     

@@ -363,64 +363,7 @@ jobs:
         # 複製我們的模組
         find . -name "*.jar" -path "*/chococars-inventory-bridge-*" -exec cp {} mods/ \;
         
-        # 創建 server.properties
-        cat > server.properties << EOF
-        enable-jmx-monitoring=false
-        rcon.port=25575
-        level-seed=
-        gamemode=survival
-        enable-command-block=false
-        enable-query=false
-        generator-settings=
-        level-name=world
-        motd=Chococar's Inventory Bridge Test Server
-        query.port=25565
-        pvp=true
-        generate-structures=true
-        difficulty=easy
-        network-compression-threshold=256
-        max-tick-time=60000
-        require-resource-pack=false
-        use-native-transport=true
-        max-players=20
-        online-mode=false
-        enable-status=true
-        allow-flight=false
-        broadcast-rcon-to-ops=true
-        view-distance=10
-        server-ip=
-        resource-pack-prompt=
-        allow-nether=true
-        server-port=25565
-        enable-rcon=false
-        sync-chunk-writes=true
-        op-permission-level=4
-        prevent-proxy-connections=false
-        hide-online-players=false
-        resource-pack=
-        entity-broadcast-range-percentage=100
-        simulation-distance=10
-        rcon.password=
-        player-idle-timeout=0
-        debug=false
-        force-gamemode=false
-        rate-limit=0
-        hardcore=false
-        white-list=false
-        broadcast-console-to-ops=true
-        spawn-npcs=true
-        spawn-animals=true
-        snooper-enabled=true
-        function-permission-level=2
-        level-type=default
-        spawn-monsters=true
-        enforce-whitelist=false
-        spawn-protection=16
-        resource-pack-sha1=
-        max-world-size=29999984
-        EOF
-        
-        # 接受 EULA
+        # 接受 EULA (讓伺服器自己生成 server.properties)
         echo "eula=true" > eula.txt
         
         echo "✅ 伺服器設置完成"
@@ -498,11 +441,30 @@ jobs:
         fi
         
         # 優雅關閉伺服器
-        echo "🛑 正在關閉伺服器..."
-        kill -TERM $SERVER_PID 2>/dev/null || true
+        echo "🛑 正在關閉 Fabric 伺服器..."
         
-        # 強制終止（如果還在運行）
-        kill $SERVER_PID 2>/dev/null || true
+        # 檢查伺服器是否還在運行
+        if kill -0 $SERVER_PID 2>/dev/null; then
+          # 發送 SIGTERM 信號
+          kill -TERM $SERVER_PID 2>/dev/null || true
+          
+          # 等待最多 10 秒讓伺服器優雅關閉
+          for i in {1..10}; do
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "✅ 伺服器已優雅關閉"
+              break
+            fi
+            sleep 1
+          done
+          
+          # 如果還在運行，強制終止
+          if kill -0 $SERVER_PID 2>/dev/null; then
+            echo "⚠️ 強制終止伺服器"
+            kill -KILL $SERVER_PID 2>/dev/null || true
+          fi
+        fi
+        
+        # 等待進程完全結束
         wait $SERVER_PID 2>/dev/null || true
         
         echo "✅ 測試完成！伺服器成功運行 60 秒"
@@ -595,64 +557,7 @@ jobs:
         # 複製我們的 Paper 插件
         find . -name "*.jar" -path "*/chococars-inventory-bridge-paper-*" -exec cp {} plugins/ \;
         
-        # 創建 server.properties
-        cat > server.properties << EOF
-        enable-jmx-monitoring=false
-        rcon.port=25575
-        level-seed=
-        gamemode=survival
-        enable-command-block=false
-        enable-query=false
-        generator-settings=
-        level-name=world
-        motd=Chococar's Inventory Bridge Paper Test Server
-        query.port=25565
-        pvp=true
-        generate-structures=true
-        difficulty=easy
-        network-compression-threshold=256
-        max-tick-time=60000
-        require-resource-pack=false
-        use-native-transport=true
-        max-players=20
-        online-mode=false
-        enable-status=true
-        allow-flight=false
-        broadcast-rcon-to-ops=true
-        view-distance=10
-        server-ip=
-        resource-pack-prompt=
-        allow-nether=true
-        server-port=25565
-        enable-rcon=false
-        sync-chunk-writes=true
-        op-permission-level=4
-        prevent-proxy-connections=false
-        hide-online-players=false
-        resource-pack=
-        entity-broadcast-range-percentage=100
-        simulation-distance=10
-        rcon.password=
-        player-idle-timeout=0
-        debug=false
-        force-gamemode=false
-        rate-limit=0
-        hardcore=false
-        white-list=false
-        broadcast-console-to-ops=true
-        spawn-npcs=true
-        spawn-animals=true
-        snooper-enabled=true
-        function-permission-level=2
-        level-type=default
-        spawn-monsters=true
-        enforce-whitelist=false
-        spawn-protection=16
-        resource-pack-sha1=
-        max-world-size=29999984
-        EOF
-        
-        # 接受 EULA
+        # 接受 EULA (讓伺服器自己生成 server.properties)
         echo "eula=true" > eula.txt
         
         echo "✅ Paper 伺服器設置完成"
@@ -731,10 +636,29 @@ jobs:
         
         # 優雅關閉伺服器
         echo "🛑 正在關閉 Paper 伺服器..."
-        kill -TERM $SERVER_PID 2>/dev/null || true
         
-        # 強制終止（如果還在運行）
-        kill $SERVER_PID 2>/dev/null || true
+        # 檢查伺服器是否還在運行
+        if kill -0 $SERVER_PID 2>/dev/null; then
+          # 發送 SIGTERM 信號
+          kill -TERM $SERVER_PID 2>/dev/null || true
+          
+          # 等待最多 10 秒讓伺服器優雅關閉
+          for i in {1..10}; do
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "✅ Paper 伺服器已優雅關閉"
+              break
+            fi
+            sleep 1
+          done
+          
+          # 如果還在運行，強制終止
+          if kill -0 $SERVER_PID 2>/dev/null; then
+            echo "⚠️ 強制終止 Paper 伺服器"
+            kill -KILL $SERVER_PID 2>/dev/null || true
+          fi
+        fi
+        
+        # 等待進程完全結束
         wait $SERVER_PID 2>/dev/null || true
         
         echo "✅ Paper 測試完成！伺服器成功運行 60 秒"
