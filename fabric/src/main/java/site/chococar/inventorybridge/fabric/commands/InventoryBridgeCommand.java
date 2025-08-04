@@ -170,8 +170,8 @@ public class InventoryBridgeCommand {
     private static int executeInfo(CommandContext<ServerCommandSource> context) {
         ServerCommandSource source = context.getSource();
         
-        boolean isStandby = ChococarsInventoryBridgeFabric.getInstance().getDatabaseConnection().isStandbyMode();
-        String lastError = ChococarsInventoryBridgeFabric.getInstance().getDatabaseConnection().getLastConnectionError();
+        boolean isStandby = ChococarsInventoryBridgeFabric.getInstance().getDatabaseManager().isStandbyMode();
+        String lastError = ChococarsInventoryBridgeFabric.getInstance().getDatabaseManager().getLastConnectionError();
         
         source.sendFeedback(() -> Text.literal("=== " + Constants.PLUGIN_NAME + " ===").formatted(Formatting.GOLD), false);
         source.sendFeedback(() -> Text.literal("Version: ").formatted(Formatting.YELLOW)

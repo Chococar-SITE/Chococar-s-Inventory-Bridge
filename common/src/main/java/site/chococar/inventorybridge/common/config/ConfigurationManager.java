@@ -75,7 +75,6 @@ public class ConfigurationManager {
         return 1;
     }
     
-    @SuppressWarnings("unchecked")
     private Map<String, Object> migrateConfig(Map<String, Object> oldConfig, int fromVersion) {
         Map<String, Object> newConfig = createDefaultConfigData();
         
@@ -158,7 +157,6 @@ public class ConfigurationManager {
         LOGGER.info("創建默認配置文件");
     }
     
-    @SuppressWarnings("unchecked")
     private Map<String, Object> createDefaultConfigData() {
         Map<String, Object> config = new LinkedHashMap<>();
         

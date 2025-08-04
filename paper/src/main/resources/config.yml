@@ -25,10 +25,10 @@ sync:
   syncIntervalTicks: 200
   
   # Sync player inventory when joining the server
-  syncOnJoin: true
+  syncOnJoin: false
   
   # Sync player inventory when leaving the server
-  syncOnLeave: true
+  syncOnLeave: false
   
   # Sync ender chest contents
   syncEnderChest: true
@@ -64,6 +64,12 @@ compatibility:
   
   # Handle resin items (1.21.4+)
   handleResinItems: true
+  
+  # Handle ghast-related items (1.21.6+)
+  handleGhastItems: true
+  
+  # Handle new music discs (1.21.6+, 1.21.7+)
+  handleNewMusicDiscs: true
   
   # Current Minecraft version
   minecraftVersion: "1.21.8"

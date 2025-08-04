@@ -6,8 +6,8 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
-import site.chococar.inventorybridge.common.config.ConfigurationManager;
-import site.chococar.inventorybridge.common.database.DatabaseConnection;
+import site.chococar.inventorybridge.fabric.config.FabricConfigManager;
+import site.chococar.inventorybridge.fabric.database.FabricDatabaseManager;
 import site.chococar.inventorybridge.fabric.commands.InventoryBridgeCommand;
 import site.chococar.inventorybridge.fabric.sync.FabricInventorySyncManager;
 import site.chococar.inventorybridge.fabric.util.FabricLogger;
@@ -17,8 +17,8 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
     private static final FabricLogger LOGGER = new FabricLogger("ChococarsInventoryBridge");
     
     private static ChococarsInventoryBridgeFabric instance;
-    private ConfigurationManager configManager;
-    private DatabaseConnection databaseConnection;
+    private FabricConfigManager configManager;
+    private FabricDatabaseManager databaseManager;
     private FabricInventorySyncManager syncManager;
     
     @Override
@@ -27,16 +27,14 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         LOGGER.info("正在初始化 Chococar's Inventory Bridge");
         
         // 初始化配置
-        configManager = new ConfigurationManager(
-            FabricLoader.getInstance().getConfigDir().resolve("chococars_inventory_bridge.yml")
-        );
+        configManager = new FabricConfigManager();
         configManager.loadConfig();
         
         // 初始化資料庫連接
-        databaseConnection = new DatabaseConnection(configManager);
+        databaseManager = new FabricDatabaseManager(configManager);
         
         // 初始化同步管理器
-        syncManager = new FabricInventorySyncManager(databaseConnection, configManager);
+        syncManager = new FabricInventorySyncManager(databaseManager.getDatabaseConnection(), configManager.getConfigurationManager());
         
         // 註冊指令
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
@@ -50,7 +48,7 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         
         // 註冊玩家連接事件
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            if (!databaseConnection.isStandbyMode()) {
+            if (!databaseManager.isStandbyMode()) {
                 syncManager.onPlayerJoin(handler.getPlayer());
             } else {
                 LOGGER.warn("玩家 {} 加入伺服器，但資料庫處於待機模式，跳過背包同步", 
@@ -59,7 +57,7 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         });
         
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            if (!databaseConnection.isStandbyMode()) {
+            if (!databaseManager.isStandbyMode()) {
                 syncManager.onPlayerLeave(handler.getPlayer());
             } else {
                 LOGGER.warn("玩家 {} 離開伺服器，但資料庫處於待機模式，跳過背包同步", 
@@ -76,14 +74,14 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         // 設置伺服器實例供同步管理器使用
         FabricInventorySyncManager.setServerInstance(server);
         
-        databaseConnection.initialize();
+        databaseManager.initialize();
     }
     
     private void onServerStarted(MinecraftServer server) {
         LOGGER.info("伺服器已完全啟動");
         
         // 如果資料庫連接成功，掃描現有玩家檔案
-        if (!databaseConnection.isStandbyMode()) {
+        if (!databaseManager.isStandbyMode()) {
             syncManager.scanAndSyncExistingPlayerFiles();
             LOGGER.info("已開始掃描現有玩家檔案進行同步");
         }
@@ -91,8 +89,8 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
     
     private void onServerStopping(MinecraftServer server) {
         LOGGER.info("伺服器關閉中 - 關閉資料庫連接");
-        if (databaseConnection != null) {
-            databaseConnection.close();
+        if (databaseManager != null) {
+            databaseManager.close();
         }
     }
     
@@ -100,12 +98,12 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         return instance;
     }
     
-    public ConfigurationManager getConfigManager() {
+    public FabricConfigManager getConfigManager() {
         return configManager;
     }
     
-    public DatabaseConnection getDatabaseConnection() {
-        return databaseConnection;
+    public FabricDatabaseManager getDatabaseManager() {
+        return databaseManager;
     }
     
     public FabricInventorySyncManager getSyncManager() {
@@ -117,10 +115,12 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
     }
     
     public boolean reconnectDatabase() {
-        LOGGER.info("管理員請求重新連接資料庫");
-        boolean success = databaseConnection.reconnect();
+        boolean success = databaseManager.reconnect();
         
         if (success) {
+            // 重新初始化同步管理器
+            syncManager = new FabricInventorySyncManager(databaseManager.getDatabaseConnection(), configManager.getConfigurationManager());
+            
             // 重新連接成功後，掃描現有玩家檔案
             syncManager.scanAndSyncExistingPlayerFiles();
             LOGGER.info("已開始掃描現有玩家檔案進行同步");
@@ -137,23 +137,28 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
             configManager.loadConfig();
             LOGGER.info("配置文件重新載入成功");
             
-            // 嘗試重新連接資料庫（使用新配置）
-            boolean dbReconnected = databaseConnection.reconnect();
+            // 重新初始化資料庫連接（使用新配置）
+            boolean dbReconnected = databaseManager.reconnect();
             
-            if (dbReconnected) {
+            // 重新初始化同步管理器
+            syncManager = new FabricInventorySyncManager(databaseManager.getDatabaseConnection(), configManager.getConfigurationManager());
+            
+            if (!databaseManager.isStandbyMode()) {
                 LOGGER.info("✅ 配置重新載入完成");
                 LOGGER.info("配置文件已重新載入");
-                LOGGER.info("資料庫連接已更新");
+                LOGGER.info("資料庫連接已重新初始化");
+                LOGGER.info("同步管理器已更新");
                 LOGGER.info("所有功能恢復正常運作");
                 
                 // 配置重載且資料庫連接成功後，掃描現有玩家檔案
                 syncManager.scanAndSyncExistingPlayerFiles();
                 LOGGER.info("已開始掃描現有玩家檔案進行同步");
             } else {
-                LOGGER.error("⚠️ 配置重新載入部分成功");
-                LOGGER.error("配置文件已重新載入");
-                LOGGER.error("但資料庫連接失敗，仍處於待機模式");
-                LOGGER.error("錯誤原因: {}", databaseConnection.getLastConnectionError());
+                LOGGER.warn("⚠️ 配置重新載入部分成功");
+                LOGGER.warn("配置文件已重新載入");
+                LOGGER.warn("但資料庫連接失敗，進入待機模式");
+                LOGGER.warn("錯誤原因: {}", databaseManager.getLastConnectionError());
+                LOGGER.warn("請檢查資料庫設定和連接狀態");
             }
             
             return true;
