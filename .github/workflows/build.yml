@@ -329,19 +329,35 @@ jobs:
         
         # 下載 Fabric API
         echo "📥 下載 Fabric API $FABRIC_API_VERSION..."
-        # 使用 Modrinth API 獲取 Fabric API 下載連結
-        API_URL="https://api.modrinth.com/v2/project/fabric-api/version?game_versions=[\"$MC_VERSION\"]&loaders=[\"fabric\"]"
-        echo "🔍 查詢 API: $API_URL"
         
-        FABRIC_API_URL=$(curl -s "$API_URL" | python3 -c 'import sys, json; data = json.load(sys.stdin); print(data[0]["files"][0]["url"] if data and len(data) > 0 else "")' 2>/dev/null || echo "")
+        # 提取版本號 (例如 "0.131.0+1.21.8" -> "0.131.0")
+        API_VERSION_ONLY=$(echo "$FABRIC_API_VERSION" | cut -d'+' -f1)
         
-        if [ -n "$FABRIC_API_URL" ]; then
-          echo "✅ 找到 Fabric API 下載連結: $FABRIC_API_URL"
-          wget -O "mods/fabric-api-$FABRIC_API_VERSION.jar" "$FABRIC_API_URL" || {
-            echo "⚠️ 下載失敗，繼續測試..."
-          }
+        # 嘗試多個可能的下載源
+        DOWNLOAD_SUCCESS=false
+        
+        # 方法1: Maven repository
+        MAVEN_URL="https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/$FABRIC_API_VERSION/fabric-api-$FABRIC_API_VERSION.jar"
+        echo "🔍 嘗試 Maven: $MAVEN_URL"
+        if wget -O "mods/fabric-api-$FABRIC_API_VERSION.jar" "$MAVEN_URL" 2>/dev/null; then
+          echo "✅ 從 Maven 成功下載 Fabric API"
+          DOWNLOAD_SUCCESS=true
         else
-          echo "⚠️ 無法找到對應版本的 Fabric API，繼續測試..."
+          # 方法2: GitHub releases (使用版本號)
+          GITHUB_URL="https://github.com/FabricMC/fabric/releases/download/v$API_VERSION_ONLY/fabric-api-$FABRIC_API_VERSION.jar"
+          echo "🔍 嘗試 GitHub: $GITHUB_URL"
+          if wget -O "mods/fabric-api-$FABRIC_API_VERSION.jar" "$GITHUB_URL" 2>/dev/null; then
+            echo "✅ 從 GitHub 成功下載 Fabric API"
+            DOWNLOAD_SUCCESS=true
+          fi
+        fi
+        
+        if [ "$DOWNLOAD_SUCCESS" = false ]; then
+          echo "❌ 無法下載 Fabric API，測試將失敗"
+          echo "🔍 嘗試的 URL:"
+          echo "  - $MAVEN_URL"
+          echo "  - $GITHUB_URL"
+          rm -f "mods/fabric-api-$FABRIC_API_VERSION.jar" 2>/dev/null || true
         fi
         
         # 複製我們的模組
