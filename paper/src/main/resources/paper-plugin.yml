@@ -1,6 +1,6 @@
 name: ChococarsInventoryBridge
 version: '${version}'
-description: '${description}'
+description: ${description}
 main: site.chococar.inventorybridge.paper.ChococarsInventoryBridgePlugin
 api-version: '${apiVersion}'
 authors: [ chococar.site ]

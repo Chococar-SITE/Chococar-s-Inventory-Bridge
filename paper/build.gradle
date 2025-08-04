@@ -7,7 +7,7 @@ plugins {
 
 version = project.version
 group = project.group
-description = 'Chococar\'s Inventory Bridge Paper Plugin'
+description = 'Chococar Inventory Bridge Paper Plugin'
 
 base {
     archivesName = "chococars-inventory-bridge-paper"

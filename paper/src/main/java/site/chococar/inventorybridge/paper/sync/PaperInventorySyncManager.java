@@ -25,63 +25,13 @@ public class PaperInventorySyncManager {
     }
     
     public void onPlayerJoin(Player player) {
-        PaperConfigManager config = getConfigManager();
-        
-        if (!config.isSyncOnJoin()) {
-            return;
-        }
-        
-        UUID playerUuid = player.getUniqueId();
-        
-        if (syncInProgress.getOrDefault(playerUuid, false)) {
-            return;
-        }
-        
-        syncInProgress.put(playerUuid, true);
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                loadPlayerInventory(player);
-                databaseManager.logSync(playerUuid, config.getServerId(), "JOIN", "SUCCESS", null);
-                logger.info("Successfully loaded inventory for player " + player.getName());
-            } catch (Exception e) {
-                databaseManager.logSync(playerUuid, config.getServerId(), "JOIN", "FAILED", e.getMessage());
-                logger.severe("Failed to load inventory for player " + player.getName() + ": " + e.getMessage());
-            } finally {
-                syncInProgress.put(playerUuid, false);
-                lastSyncTimes.put(playerUuid, System.currentTimeMillis());
-            }
-        });
+        // Auto-load disabled for safety to prevent timing issues and item loss
+        logger.info("Player " + player.getName() + " joined - auto-load disabled for safety. Use '/ib sync load' to manually load inventory.");
     }
     
     public void onPlayerLeave(Player player) {
-        PaperConfigManager config = getConfigManager();
-        
-        if (!config.isSyncOnLeave()) {
-            return;
-        }
-        
-        UUID playerUuid = player.getUniqueId();
-        
-        if (syncInProgress.getOrDefault(playerUuid, false)) {
-            return;
-        }
-        
-        syncInProgress.put(playerUuid, true);
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                savePlayerInventory(player);
-                databaseManager.logSync(playerUuid, config.getServerId(), "LEAVE", "SUCCESS", null);
-                logger.info("Successfully saved inventory for player " + player.getName());
-            } catch (Exception e) {
-                databaseManager.logSync(playerUuid, config.getServerId(), "LEAVE", "FAILED", e.getMessage());
-                logger.severe("Failed to save inventory for player " + player.getName() + ": " + e.getMessage());
-            } finally {
-                syncInProgress.remove(playerUuid);
-                lastSyncTimes.put(playerUuid, System.currentTimeMillis());
-            }
-        });
+        // Auto-save disabled for safety to prevent timing issues and item loss
+        logger.info("Player " + player.getName() + " left - auto-save disabled for safety. Use '/ib sync save' to manually save inventory.");
     }
     
     public void manualSync(Player player, boolean save) {
