@@ -31,19 +31,13 @@ public class DatabaseConnection {
         } catch (Exception e) {
             this.standbyMode = true;
             this.lastConnectionError = e.getMessage();
-            LOGGER.warn("╔══════════════════════════════════════════════════════════════════════════════════════╗");
-            LOGGER.warn("║                             🚧 進入待機模式 🚧                                      ║");
-            LOGGER.warn("║                                                                                      ║");
-            LOGGER.warn("║  無法連接到資料庫，模組/插件將在待機模式下運行                                         ║");
-            LOGGER.warn("║  在此模式下，背包同步功能將被暫停                                                      ║");
-            LOGGER.warn("║                                                                                      ║");
-            LOGGER.warn("║  錯誤原因: {}                                      ║", String.format("%-58s", e.getMessage()));
-            LOGGER.warn("║                                                                                      ║");
-            LOGGER.warn("║  請檢查資料庫設定並使用以下指令重新連線:                                                ║");
-            LOGGER.warn("║  - /inventorybridge reload (重新載入設定)                                           ║");
-            LOGGER.warn("║  - /inventorybridge reconnect (重新連接資料庫)                                      ║");
-            LOGGER.warn("║                                                                                      ║");
-            LOGGER.warn("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+            LOGGER.warn("🚧 進入待機模式 🚧");
+            LOGGER.warn("無法連接到資料庫，模組/插件將在待機模式下運行");
+            LOGGER.warn("在此模式下，背包同步功能將被暫停");
+            LOGGER.warn("錯誤原因: {}", e.getMessage());
+            LOGGER.warn("請檢查資料庫設定並使用以下指令重新連線:");
+            LOGGER.warn("- /inventorybridge reload (重新載入設定)");
+            LOGGER.warn("- /inventorybridge reconnect (重新連接資料庫)");
         }
     }
     
@@ -188,29 +182,20 @@ public class DatabaseConnection {
         
         try {
             attemptConnection();
-            LOGGER.info("╔══════════════════════════════════════════════════════════════════════════════════════╗");
-            LOGGER.info("║                             ✅ 資料庫重新連接成功 ✅                                  ║");
-            LOGGER.info("║                                                                                      ║");
-            LOGGER.info("║  背包同步功能已恢復正常運作                                                           ║");
-            LOGGER.info("║  所有待處理的同步操作將會被執行                                                        ║");
-            LOGGER.info("║                                                                                      ║");
-            LOGGER.info("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+            LOGGER.info("✅ 資料庫重新連接成功");
+            LOGGER.info("背包同步功能已恢復正常運作");
+            LOGGER.info("所有待處理的同步操作將會被執行");
             return true;
         } catch (Exception e) {
             this.standbyMode = true;
             this.lastConnectionError = e.getMessage();
-            LOGGER.error("╔══════════════════════════════════════════════════════════════════════════════════════╗");
-            LOGGER.error("║                             ❌ 資料庫重新連接失敗 ❌                                  ║");
-            LOGGER.error("║                                                                                      ║");
-            LOGGER.error("║  錯誤原因: {}                                      ║", String.format("%-58s", e.getMessage()));
-            LOGGER.error("║                                                                                      ║");
-            LOGGER.error("║  請檢查以下項目:                                                                     ║");
-            LOGGER.error("║  1. 資料庫伺服器是否正在運行                                                          ║");
-            LOGGER.error("║  2. 網路連接是否正常                                                                 ║");
-            LOGGER.error("║  3. 資料庫設定是否正確                                                               ║");
-            LOGGER.error("║  4. 使用者權限是否足夠                                                               ║");
-            LOGGER.error("║                                                                                      ║");
-            LOGGER.error("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+            LOGGER.error("❌ 資料庫重新連接失敗");
+            LOGGER.error("錯誤原因: {}", e.getMessage());
+            LOGGER.error("請檢查以下項目:");
+            LOGGER.error("1. 資料庫伺服器是否正在運行");
+            LOGGER.error("2. 網路連接是否正常");
+            LOGGER.error("3. 資料庫設定是否正確");
+            LOGGER.error("4. 使用者權限是否足夠");
             return false;
         }
     }

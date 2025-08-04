@@ -118,36 +118,22 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
             boolean dbReconnected = databaseConnection.reconnect();
             
             if (dbReconnected) {
-                LOGGER.info("╔══════════════════════════════════════════════════════════════════════════════════════╗");
-                LOGGER.info("║                             ✅ 配置重新載入完成 ✅                                  ║");
-                LOGGER.info("║                                                                                      ║");
-                LOGGER.info("║  配置文件已重新載入                                                                   ║");
-                LOGGER.info("║  資料庫連接已更新                                                                     ║");
-                LOGGER.info("║  所有功能恢復正常運作                                                                 ║");
-                LOGGER.info("║                                                                                      ║");
-                LOGGER.info("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+                LOGGER.info("✅ 配置重新載入完成");
+                LOGGER.info("配置文件已重新載入");
+                LOGGER.info("資料庫連接已更新");
+                LOGGER.info("所有功能恢復正常運作");
             } else {
-                LOGGER.error("╔══════════════════════════════════════════════════════════════════════════════════════╗");
-                LOGGER.error("║                             ⚠️ 配置重新載入部分成功 ⚠️                              ║");
-                LOGGER.error("║                                                                                      ║");
-                LOGGER.error("║  配置文件已重新載入                                                                   ║");
-                LOGGER.error("║  但資料庫連接失敗，仍處於待機模式                                                      ║");
-                LOGGER.error("║                                                                                      ║");
-                LOGGER.error("║  錯誤原因: {}                                      ║", String.format("%-58s", databaseConnection.getLastConnectionError()));
-                LOGGER.error("║                                                                                      ║");
-                LOGGER.error("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+                LOGGER.error("⚠️ 配置重新載入部分成功");
+                LOGGER.error("配置文件已重新載入");
+                LOGGER.error("但資料庫連接失敗，仍處於待機模式");
+                LOGGER.error("錯誤原因: {}", databaseConnection.getLastConnectionError());
             }
             
             return true;
         } catch (Exception e) {
-            LOGGER.error("╔══════════════════════════════════════════════════════════════════════════════════════╗");
-            LOGGER.error("║                             ❌ 配置重新載入失敗 ❌                                    ║");
-            LOGGER.error("║                                                                                      ║");
-            LOGGER.error("║  錯誤原因: {}                                      ║", String.format("%-58s", e.getMessage()));
-            LOGGER.error("║                                                                                      ║");
-            LOGGER.error("║  請檢查配置文件格式是否正確                                                            ║");
-            LOGGER.error("║                                                                                      ║");
-            LOGGER.error("╚══════════════════════════════════════════════════════════════════════════════════════╝");
+            LOGGER.error("❌ 配置重新載入失敗");
+            LOGGER.error("錯誤原因: {}", e.getMessage());
+            LOGGER.error("請檢查配置文件格式是否正確");
             return false;
         }
     }
