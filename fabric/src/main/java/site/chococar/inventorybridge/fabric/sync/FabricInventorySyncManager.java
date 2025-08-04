@@ -326,8 +326,16 @@ public class FabricInventorySyncManager {
         
         CompletableFuture.runAsync(() -> {
             try {
+                // 等待一秒確保伺服器完全準備就緒
+                Thread.sleep(1000);
+                
                 if (serverInstance == null) {
                     ChococarsInventoryBridgeFabric.getLogger().warn("無法獲取 Minecraft 伺服器實例");
+                    return;
+                }
+                
+                if (serverInstance.getPlayerManager() == null) {
+                    ChococarsInventoryBridgeFabric.getLogger().warn("PlayerManager 尚未初始化，跳過玩家檔案掃描");
                     return;
                 }
                 
@@ -377,6 +385,9 @@ public class FabricInventorySyncManager {
                 ChococarsInventoryBridgeFabric.getLogger().info("玩家檔案掃描完成！掃描了 " + totalScanned + " 個檔案，同步了 " + totalSynced + " 個新玩家至資料庫");
                 hasScannedPlayerFiles = true;
                 
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                ChococarsInventoryBridgeFabric.getLogger().warn("玩家檔案掃描被中斷");
             } catch (Exception e) {
                 ChococarsInventoryBridgeFabric.getLogger().error("掃描玩家檔案時發生錯誤", e);
             }
@@ -392,7 +403,10 @@ public class FabricInventorySyncManager {
             }
             
             // 獲取在線玩家（如果存在）
-            ServerPlayerEntity onlinePlayer = serverInstance != null ? serverInstance.getPlayerManager().getPlayer(playerUuid) : null;
+            ServerPlayerEntity onlinePlayer = null;
+            if (serverInstance != null && serverInstance.getPlayerManager() != null) {
+                onlinePlayer = serverInstance.getPlayerManager().getPlayer(playerUuid);
+            }
             
             String inventoryData;
             String enderChestData = null;

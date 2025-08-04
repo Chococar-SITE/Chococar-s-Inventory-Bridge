@@ -16,6 +16,8 @@ public class PaperDatabaseManager {
     private final Logger logger;
     private HikariDataSource dataSource;
     private String tablePrefix;
+    private volatile boolean standbyMode = false;
+    private String lastConnectionError;
     
     public PaperDatabaseManager(PaperConfigManager configManager) {
         this.configManager = configManager;
@@ -23,27 +25,38 @@ public class PaperDatabaseManager {
     }
     
     public void initialize() {
-        this.tablePrefix = configManager.getTablePrefix();
-        
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(String.format("jdbc:mysql://%s:%d/%s?useSSL=%s&allowPublicKeyRetrieval=true&serverTimezone=UTC",
-                configManager.getDatabaseHost(), 
-                configManager.getDatabasePort(), 
-                configManager.getDatabaseName(), 
-                configManager.useSSL()));
-        config.setUsername(configManager.getDatabaseUsername());
-        config.setPassword(configManager.getDatabasePassword());
-        config.setMaximumPoolSize(configManager.getMaxPoolSize());
-        config.setConnectionTimeout(configManager.getConnectionTimeout());
-        config.setDriverClassName("com.mysql.cj.jdbc.Driver");
-        config.addDataSourceProperty("cachePrepStmts", "true");
-        config.addDataSourceProperty("prepStmtCacheSize", "250");
-        config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
-        
-        dataSource = new HikariDataSource(config);
-        
-        createTables();
-        logger.info("Paper database connection initialized");
+        try {
+            this.tablePrefix = configManager.getTablePrefix();
+            
+            HikariConfig config = new HikariConfig();
+            config.setJdbcUrl(String.format("jdbc:mysql://%s:%d/%s?useSSL=%s&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+                    configManager.getDatabaseHost(), 
+                    configManager.getDatabasePort(), 
+                    configManager.getDatabaseName(), 
+                    configManager.useSSL()));
+            config.setUsername(configManager.getDatabaseUsername());
+            config.setPassword(configManager.getDatabasePassword());
+            config.setMaximumPoolSize(configManager.getMaxPoolSize());
+            config.setConnectionTimeout(configManager.getConnectionTimeout());
+            config.setDriverClassName("com.mysql.cj.jdbc.Driver");
+            config.addDataSourceProperty("cachePrepStmts", "true");
+            config.addDataSourceProperty("prepStmtCacheSize", "250");
+            config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+            
+            dataSource = new HikariDataSource(config);
+            
+            createTables();
+            standbyMode = false;
+            lastConnectionError = null;
+            logger.info("Paper database connection initialized successfully");
+        } catch (Exception e) {
+            standbyMode = true;
+            lastConnectionError = e.getMessage();
+            logger.severe("❌ 資料庫連接失敗，進入待機模式");
+            logger.severe("錯誤原因: " + e.getMessage());
+            logger.severe("插件將繼續運行，但物品欄同步功能已停用");
+            logger.severe("請修復資料庫問題後使用 '/ib reconnect' 重新連接");
+        }
     }
     
     private void createTables() {
@@ -191,6 +204,34 @@ public class PaperDatabaseManager {
             stmt.executeUpdate();
         } catch (SQLException e) {
             logger.warning("Failed to log sync for player " + playerUuid + ": " + e.getMessage());
+        }
+    }
+    
+    public boolean isStandbyMode() {
+        return standbyMode;
+    }
+    
+    public String getLastConnectionError() {
+        return lastConnectionError;
+    }
+    
+    public boolean reconnect() {
+        logger.info("嘗試重新連接資料庫...");
+        
+        // 關閉現有連接
+        if (dataSource != null && !dataSource.isClosed()) {
+            dataSource.close();
+        }
+        
+        // 重新初始化
+        initialize();
+        
+        if (!standbyMode) {
+            logger.info("✅ 資料庫重新連接成功");
+            return true;
+        } else {
+            logger.severe("❌ 資料庫重新連接失敗");
+            return false;
         }
     }
     

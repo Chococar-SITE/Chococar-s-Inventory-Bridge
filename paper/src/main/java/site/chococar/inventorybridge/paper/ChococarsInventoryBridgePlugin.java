@@ -29,7 +29,6 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
             // Initialize database connection
             databaseManager = new PaperDatabaseManager(configManager);
             databaseManager.initialize();
-            getLogger().info("Database manager initialized");
             
             // Initialize sync manager
             syncManager = new PaperInventorySyncManager(databaseManager);
@@ -43,15 +42,17 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
             getCommand("inventorybridge").setExecutor(new InventoryBridgeCommand(this));
             getLogger().info("Commands registered");
             
-            // Scan and sync existing player files
-            syncManager.scanAndSyncExistingPlayerFiles();
-            getLogger().info("Started scanning existing player files");
+            // Scan and sync existing player files if database is available
+            if (!databaseManager.isStandbyMode()) {
+                syncManager.scanAndSyncExistingPlayerFiles();
+                getLogger().info("Started scanning existing player files");
+            }
             
             getLogger().info("Chococar's Inventory Bridge Plugin enabled successfully");
         } catch (Exception e) {
-            getLogger().severe("Failed to enable plugin: " + e.getMessage());
+            getLogger().severe("Plugin initialization encountered an error: " + e.getMessage());
+            getLogger().severe("Plugin will continue running but some features may be limited");
             e.printStackTrace();
-            getServer().getPluginManager().disablePlugin(this);
         }
     }
     
@@ -68,12 +69,20 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
     
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        syncManager.onPlayerJoin(event.getPlayer());
+        if (!databaseManager.isStandbyMode()) {
+            syncManager.onPlayerJoin(event.getPlayer());
+        } else {
+            getLogger().warning("玩家 " + event.getPlayer().getName() + " 加入伺服器，但資料庫處於待機模式，跳過背包同步");
+        }
     }
     
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        syncManager.onPlayerLeave(event.getPlayer());
+        if (!databaseManager.isStandbyMode()) {
+            syncManager.onPlayerLeave(event.getPlayer());
+        } else {
+            getLogger().warning("玩家 " + event.getPlayer().getName() + " 離開伺服器，但資料庫處於待機模式，跳過背包同步");
+        }
     }
     
     public PaperConfigManager getConfigManager() {
@@ -101,22 +110,12 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
             getLogger().info("配置文件重新載入成功");
             
             // 重新初始化資料庫連接（使用新配置）
-            if (databaseManager != null) {
-                databaseManager.close();
-            }
+            boolean dbReconnected = databaseManager.reconnect();
             
-            databaseManager = new PaperDatabaseManager(configManager);
+            // 重新初始化同步管理器
+            syncManager = new PaperInventorySyncManager(databaseManager);
             
-            try {
-                databaseManager.initialize();
-                
-                // 重新初始化同步管理器
-                syncManager = new PaperInventorySyncManager(databaseManager);
-                
-                // 測試資料庫連接
-                boolean dbInitialized = testDatabaseConnection();
-                
-                if (dbInitialized) {
+            if (!databaseManager.isStandbyMode()) {
                     getLogger().info("✅ 配置重新載入完成");
                     getLogger().info("配置文件已重新載入");
                     getLogger().info("資料庫連接已重新初始化");
@@ -129,13 +128,10 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
                 } else {
                     getLogger().warning("⚠️ 配置重新載入部分成功");
                     getLogger().warning("配置文件已重新載入");
-                    getLogger().warning("但資料庫連接失敗，可能進入待機模式");
+                    getLogger().warning("但資料庫連接失敗，進入待機模式");
+                    getLogger().warning("錯誤原因: " + databaseManager.getLastConnectionError());
                     getLogger().warning("請檢查資料庫設定和連接狀態");
                 }
-            } catch (Exception e) {
-                getLogger().severe("初始化資料庫時發生錯誤: " + e.getMessage());
-                return false;
-            }
             
             return true;
         } catch (Exception e) {
@@ -149,34 +145,18 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
     public boolean reconnectDatabase() {
         getLogger().info("管理員請求重新連接資料庫");
         
-        try {
-            if (databaseManager != null) {
-                databaseManager.close();
-            }
-            
-            databaseManager = new PaperDatabaseManager(configManager);
-            databaseManager.initialize();
-            
+        boolean success = databaseManager.reconnect();
+        
+        if (success) {
             // 重新初始化同步管理器
             syncManager = new PaperInventorySyncManager(databaseManager);
             
-            boolean success = testDatabaseConnection();
-            
-            if (success) {
-                getLogger().info("✅ 資料庫重新連接成功");
-                
-                // 重新連接成功後，掃描現有玩家檔案
-                syncManager.scanAndSyncExistingPlayerFiles();
-                getLogger().info("已開始掃描現有玩家檔案進行同步");
-            } else {
-                getLogger().warning("❌ 資料庫重新連接失敗");
-            }
-            
-            return success;
-        } catch (Exception e) {
-            getLogger().severe("❌ 重新連接資料庫時發生錯誤: " + e.getMessage());
-            return false;
+            // 重新連接成功後，掃描現有玩家檔案
+            syncManager.scanAndSyncExistingPlayerFiles();
+            getLogger().info("已開始掃描現有玩家檔案進行同步");
         }
+        
+        return success;
     }
     
     private boolean testDatabaseConnection() {

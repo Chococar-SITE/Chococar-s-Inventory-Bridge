@@ -45,6 +45,7 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         
         // 註冊伺服器生命週期事件
         ServerLifecycleEvents.SERVER_STARTING.register(this::onServerStarting);
+        ServerLifecycleEvents.SERVER_STARTED.register(this::onServerStarted);
         ServerLifecycleEvents.SERVER_STOPPING.register(this::onServerStopping);
         
         // 註冊玩家連接事件
@@ -76,6 +77,10 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         FabricInventorySyncManager.setServerInstance(server);
         
         databaseConnection.initialize();
+    }
+    
+    private void onServerStarted(MinecraftServer server) {
+        LOGGER.info("伺服器已完全啟動");
         
         // 如果資料庫連接成功，掃描現有玩家檔案
         if (!databaseConnection.isStandbyMode()) {
