@@ -228,6 +228,238 @@ jobs:
           exit 1
         fi
 
+  test-server:
+    needs: [get-versions, build-matrix]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Get latest version and set up environment
+      run: |
+        echo "📋 獲取最新版本進行測試..."
+        python << 'EOF'
+        import json
+        import os
+        
+        with open('data/latest_versions.json', 'r') as f:
+            versions_data = json.load(f)
+        
+        complete_versions = [v for v, data in versions_data.items() if data['status'] == 'complete']
+        complete_versions.sort(key=lambda x: [int(i) for i in x.split('.')], reverse=True)
+        
+        if not complete_versions:
+            print("❌ 沒有找到完整的版本")
+            exit(1)
+            
+        latest_version = complete_versions[0]
+        data = versions_data[latest_version]
+        
+        print(f"🎯 選擇最新版本進行測試: {latest_version}")
+        
+        # 獲取最新的 Fabric Loader 版本
+        import urllib.request
+        import json as json_lib
+        
+        try:
+            with urllib.request.urlopen('https://meta.fabricmc.net/v2/versions/loader') as response:
+                loader_data = json_lib.loads(response.read())
+                latest_loader = loader_data[0]['version']  # 第一個是最新的穩定版
+                print(f"📦 最新 Fabric Loader 版本: {latest_loader}")
+        except Exception as e:
+            print(f"⚠️ 無法獲取最新 Loader 版本，使用預設值: {e}")
+            latest_loader = "0.16.9"  # 備用版本
+        
+        with open(os.environ['GITHUB_ENV'], 'a') as env_file:
+            env_file.write(f"MC_VERSION={latest_version}\n")
+            env_file.write(f"FABRIC_API_VERSION={data['fabric_api']}\n")
+            env_file.write(f"LOADER_VERSION={latest_loader}\n")
+            env_file.write(f"ARTIFACT_PATTERN=chococars-inventory-bridge-fabric-{latest_version}-*\n")
+        EOF
+        
+    - name: Download latest Fabric artifact
+      uses: actions/download-artifact@v4
+      with:
+        pattern: ${{ env.ARTIFACT_PATTERN }}
+        path: test-server/
+        merge-multiple: true
+        
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        
+    - name: Setup Minecraft Fabric Server
+      run: |
+        mkdir -p test-server
+        cd test-server
+        
+        # 下載 Minecraft server jar
+        echo "📥 下載 Minecraft $MC_VERSION server..."
+        wget -O server.jar "https://piston-data.mojang.com/v1/objects/$(curl -s https://piston-meta.mojang.com/mc/game/version_manifest_v2.json | jq -r ".versions[] | select(.id==\"$MC_VERSION\") | .url" | xargs curl -s | jq -r '.downloads.server.url' | sed 's|.*objects/\([^/]*\)/.*|\1|')/server.jar" || {
+          echo "❌ 無法下載 Minecraft server"
+          exit 1
+        }
+        
+        # 下載 Fabric installer
+        echo "📥 下載 Fabric installer..."
+        wget -O fabric-installer.jar "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar"
+        
+        # 安裝 Fabric server
+        echo "🔧 安裝 Fabric server..."
+        java -jar fabric-installer.jar server -mcversion $MC_VERSION -loader $LOADER_VERSION -downloadMinecraft
+        
+        # 創建 mods 目錄並複製我們的模組
+        mkdir -p mods
+        
+        # 下載 Fabric API
+        echo "📥 下載 Fabric API $FABRIC_API_VERSION..."
+        wget -O "mods/fabric-api-$FABRIC_API_VERSION.jar" "https://github.com/FabricMC/fabric/releases/download/$(echo $FABRIC_API_VERSION | cut -d'+' -f1)/fabric-api-$FABRIC_API_VERSION.jar" || {
+          echo "⚠️ 無法下載 Fabric API，繼續測試..."
+        }
+        
+        # 複製我們的模組
+        find . -name "*.jar" -path "*/chococars-inventory-bridge-*" -exec cp {} mods/ \;
+        
+        # 創建 server.properties
+        cat > server.properties << EOF
+        enable-jmx-monitoring=false
+        rcon.port=25575
+        level-seed=
+        gamemode=survival
+        enable-command-block=false
+        enable-query=false
+        generator-settings=
+        level-name=world
+        motd=Chococar's Inventory Bridge Test Server
+        query.port=25565
+        pvp=true
+        generate-structures=true
+        difficulty=easy
+        network-compression-threshold=256
+        max-tick-time=60000
+        require-resource-pack=false
+        use-native-transport=true
+        max-players=20
+        online-mode=false
+        enable-status=true
+        allow-flight=false
+        broadcast-rcon-to-ops=true
+        view-distance=10
+        server-ip=
+        resource-pack-prompt=
+        allow-nether=true
+        server-port=25565
+        enable-rcon=false
+        sync-chunk-writes=true
+        op-permission-level=4
+        prevent-proxy-connections=false
+        hide-online-players=false
+        resource-pack=
+        entity-broadcast-range-percentage=100
+        simulation-distance=10
+        rcon.password=
+        player-idle-timeout=0
+        debug=false
+        force-gamemode=false
+        rate-limit=0
+        hardcore=false
+        white-list=false
+        broadcast-console-to-ops=true
+        spawn-npcs=true
+        spawn-animals=true
+        snooper-enabled=true
+        function-permission-level=2
+        level-type=default
+        spawn-monsters=true
+        enforce-whitelist=false
+        spawn-protection=16
+        resource-pack-sha1=
+        max-world-size=29999984
+        EOF
+        
+        # 接受 EULA
+        echo "eula=true" > eula.txt
+        
+        echo "✅ 伺服器設置完成"
+        
+    - name: Test Minecraft Server
+      timeout-minutes: 2
+      run: |
+        cd test-server
+        
+        echo "🚀 啟動 Minecraft 伺服器進行測試..."
+        echo "⏱️ 將運行 60 秒後自動關閉"
+        
+        # 在背景啟動伺服器
+        java -Xmx2G -Xms1G -jar fabric-server-mc.$MC_VERSION-loader.$LOADER_VERSION.jar nogui > server.log 2>&1 &
+        SERVER_PID=$!
+        
+        echo "📋 伺服器 PID: $SERVER_PID"
+        
+        # 等待伺服器啟動
+        echo "⏳ 等待伺服器啟動..."
+        for i in {1..30}; do
+          if grep -q "Done" server.log 2>/dev/null; then
+            echo "✅ 伺服器啟動成功！"
+            break
+          fi
+          if ! kill -0 $SERVER_PID 2>/dev/null; then
+            echo "❌ 伺服器啟動失敗"
+            echo "📋 伺服器日誌："
+            cat server.log
+            exit 1
+          fi
+          echo "⏳ 等待中... ($i/30)"
+          sleep 2
+        done
+        
+        # 檢查是否成功啟動
+        if ! grep -q "Done" server.log; then
+          echo "❌ 伺服器啟動超時"
+          echo "📋 伺服器日誌："
+          cat server.log
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
+        fi
+        
+        # 運行 60 秒
+        echo "🎮 伺服器正常運行中，將持續 60 秒..."
+        for i in {1..60}; do
+          if ! kill -0 $SERVER_PID 2>/dev/null; then
+            echo "❌ 伺服器意外停止"
+            echo "📋 伺服器日誌："
+            cat server.log
+            exit 1
+          fi
+          echo "⏰ 運行中... ($i/60 秒)"
+          sleep 1
+        done
+        
+        # 優雅關閉伺服器
+        echo "🛑 正在關閉伺服器..."
+        echo "stop" > server_input
+        timeout 10 tail -f server_input | java -jar fabric-server-mc.$MC_VERSION-loader.$LOADER_VERSION.jar nogui || true
+        
+        # 強制終止（如果還在運行）
+        kill $SERVER_PID 2>/dev/null || true
+        wait $SERVER_PID 2>/dev/null || true
+        
+        echo "✅ 測試完成！伺服器成功運行 60 秒"
+        echo "📋 檢查模組載入情況..."
+        
+        if grep -q "chococars_inventory_bridge" server.log; then
+          echo "✅ Chococar's Inventory Bridge 模組成功載入"
+        else
+          echo "⚠️ 未在日誌中找到模組載入記錄"
+        fi
+        
+        # 顯示關鍵日誌
+        echo "📋 伺服器啟動日誌摘要："
+        grep -E "(Done|ERROR|WARN|chococars)" server.log | tail -20 || true
+
   create-release:
     needs: [get-versions, build-matrix]
     runs-on: ubuntu-latest
@@ -274,7 +506,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   cleanup:
-    needs: [get-versions, build-matrix, create-release]
+    needs: [get-versions, build-matrix, test-server, create-release]
     runs-on: ubuntu-latest
     if: always()
     
