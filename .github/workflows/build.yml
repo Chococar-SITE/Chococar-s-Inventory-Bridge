@@ -228,7 +228,7 @@ jobs:
           exit 1
         fi
 
-  test-server:
+  test-fabric-server:
     needs: [get-versions, build-matrix]
     runs-on: ubuntu-latest
     
@@ -499,6 +499,219 @@ jobs:
         echo "📋 伺服器啟動日誌摘要："
         grep -E "(Done|ERROR|WARN|chococars)" server.log | tail -20 || true
 
+  test-paper-server:
+    needs: [get-versions, build-matrix]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Get latest version and set up environment for Paper
+      run: |
+        echo "📋 獲取最新版本進行 Paper 測試..."
+        python << 'EOF'
+        import json
+        import os
+        
+        with open('data/latest_versions.json', 'r') as f:
+            versions_data = json.load(f)
+        
+        complete_versions = [v for v, data in versions_data.items() if data['status'] == 'complete']
+        complete_versions.sort(key=lambda x: [int(i) for i in x.split('.')], reverse=True)
+        
+        if not complete_versions:
+            print("❌ 沒有找到完整的版本")
+            exit(1)
+            
+        latest_version = complete_versions[0]
+        data = versions_data[latest_version]
+        
+        print(f"🎯 選擇最新版本進行 Paper 測試: {latest_version}")
+        
+        with open(os.environ['GITHUB_ENV'], 'a') as env_file:
+            env_file.write(f"MC_VERSION={latest_version}\n")
+            env_file.write(f"PAPER_VERSION={data['paper']}\n")
+            env_file.write(f"ARTIFACT_PATTERN=chococars-inventory-bridge-paper-{latest_version}-*\n")
+        EOF
+        
+    - name: Download latest Paper artifact
+      uses: actions/download-artifact@v4
+      with:
+        pattern: ${{ env.ARTIFACT_PATTERN }}
+        path: test-server/
+        merge-multiple: true
+        
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        
+    - name: Setup Minecraft Paper Server
+      run: |
+        mkdir -p test-server
+        cd test-server
+        
+        # 下載 Paper server jar
+        echo "📥 下載 Paper $PAPER_VERSION server..."
+        PAPER_BUILD_URL="https://api.papermc.io/v2/projects/paper/versions/$MC_VERSION/builds"
+        LATEST_BUILD=$(curl -s "$PAPER_BUILD_URL" | python3 -c 'import sys, json; data = json.load(sys.stdin); print(data["builds"][-1]["build"])' 2>/dev/null || echo "")
+        
+        if [ -n "$LATEST_BUILD" ]; then
+          PAPER_JAR_URL="https://api.papermc.io/v2/projects/paper/versions/$MC_VERSION/builds/$LATEST_BUILD/downloads/paper-$MC_VERSION-$LATEST_BUILD.jar"
+          echo "📥 下載 Paper build $LATEST_BUILD..."
+          wget -O server.jar "$PAPER_JAR_URL" || {
+            echo "❌ 無法下載 Paper server"
+            exit 1
+          }
+        else
+          echo "❌ 無法獲取 Paper 構建資訊"
+          exit 1
+        fi
+        
+        # 創建 plugins 目錄並複製我們的插件
+        mkdir -p plugins
+        
+        # 複製我們的 Paper 插件
+        find . -name "*.jar" -path "*/chococars-inventory-bridge-paper-*" -exec cp {} plugins/ \;
+        
+        # 創建 server.properties
+        cat > server.properties << EOF
+        enable-jmx-monitoring=false
+        rcon.port=25575
+        level-seed=
+        gamemode=survival
+        enable-command-block=false
+        enable-query=false
+        generator-settings=
+        level-name=world
+        motd=Chococar's Inventory Bridge Paper Test Server
+        query.port=25565
+        pvp=true
+        generate-structures=true
+        difficulty=easy
+        network-compression-threshold=256
+        max-tick-time=60000
+        require-resource-pack=false
+        use-native-transport=true
+        max-players=20
+        online-mode=false
+        enable-status=true
+        allow-flight=false
+        broadcast-rcon-to-ops=true
+        view-distance=10
+        server-ip=
+        resource-pack-prompt=
+        allow-nether=true
+        server-port=25565
+        enable-rcon=false
+        sync-chunk-writes=true
+        op-permission-level=4
+        prevent-proxy-connections=false
+        hide-online-players=false
+        resource-pack=
+        entity-broadcast-range-percentage=100
+        simulation-distance=10
+        rcon.password=
+        player-idle-timeout=0
+        debug=false
+        force-gamemode=false
+        rate-limit=0
+        hardcore=false
+        white-list=false
+        broadcast-console-to-ops=true
+        spawn-npcs=true
+        spawn-animals=true
+        snooper-enabled=true
+        function-permission-level=2
+        level-type=default
+        spawn-monsters=true
+        enforce-whitelist=false
+        spawn-protection=16
+        resource-pack-sha1=
+        max-world-size=29999984
+        EOF
+        
+        # 接受 EULA
+        echo "eula=true" > eula.txt
+        
+        echo "✅ Paper 伺服器設置完成"
+        
+    - name: Test Paper Server
+      timeout-minutes: 2
+      run: |
+        cd test-server
+        
+        echo "🚀 啟動 Paper 伺服器進行測試..."
+        echo "⏱️ 將運行 60 秒後自動關閉"
+        
+        # 在背景啟動伺服器
+        java -Xmx2G -Xms1G -jar server.jar nogui > server.log 2>&1 &
+        SERVER_PID=$!
+        
+        echo "📋 伺服器 PID: $SERVER_PID"
+        
+        # 等待伺服器啟動
+        echo "⏳ 等待 Paper 伺服器啟動..."
+        for i in {1..30}; do
+          if grep -q "Done" server.log 2>/dev/null; then
+            echo "✅ Paper 伺服器啟動成功！"
+            break
+          fi
+          if ! kill -0 $SERVER_PID 2>/dev/null; then
+            echo "❌ Paper 伺服器啟動失敗"
+            echo "📋 伺服器日誌："
+            cat server.log
+            exit 1
+          fi
+          echo "⏳ 等待中... ($i/30)"
+          sleep 2
+        done
+        
+        # 檢查是否成功啟動
+        if ! grep -q "Done" server.log; then
+          echo "❌ Paper 伺服器啟動超時"
+          echo "📋 伺服器日誌："
+          cat server.log
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
+        fi
+        
+        # 運行 60 秒
+        echo "🎮 Paper 伺服器正常運行中，將持續 60 秒..."
+        for i in {1..60}; do
+          if ! kill -0 $SERVER_PID 2>/dev/null; then
+            echo "❌ Paper 伺服器意外停止"
+            echo "📋 伺服器日誌："
+            cat server.log
+            exit 1
+          fi
+          echo "⏰ 運行中... ($i/60 秒)"
+          sleep 1
+        done
+        
+        # 優雅關閉伺服器
+        echo "🛑 正在關閉 Paper 伺服器..."
+        kill -TERM $SERVER_PID 2>/dev/null || true
+        
+        # 強制終止（如果還在運行）
+        kill $SERVER_PID 2>/dev/null || true
+        wait $SERVER_PID 2>/dev/null || true
+        
+        echo "✅ Paper 測試完成！伺服器成功運行 60 秒"
+        echo "📋 檢查插件載入情況..."
+        
+        if grep -q -i "chococar\|inventory.*bridge" server.log; then
+          echo "✅ Chococar's Inventory Bridge 插件成功載入"
+        else
+          echo "⚠️ 未在日誌中找到插件載入記錄"
+        fi
+        
+        # 顯示關鍵日誌
+        echo "📋 Paper 伺服器啟動日誌摘要："
+        grep -E "(Done|ERROR|WARN|chococar)" server.log | tail -20 || true
+
   create-release:
     needs: [get-versions, build-matrix]
     runs-on: ubuntu-latest
@@ -545,7 +758,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   cleanup:
-    needs: [get-versions, build-matrix, test-server, create-release]
+    needs: [get-versions, build-matrix, test-fabric-server, test-paper-server, create-release]
     runs-on: ubuntu-latest
     if: always()
     

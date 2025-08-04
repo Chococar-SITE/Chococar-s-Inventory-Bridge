@@ -32,6 +32,9 @@ dependencies {
     implementation project(':common')
     include project(':common')
     
+    // 包含 SnakeYAML (通過 common 模組的傳遞依賴)
+    include 'org.yaml:snakeyaml:2.0'
+    
     // 測試依賴
     testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'
 }
