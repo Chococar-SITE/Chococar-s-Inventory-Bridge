@@ -152,6 +152,29 @@ public class PaperDatabaseManager {
         return null;
     }
     
+    public boolean hasInventory(UUID playerUuid, String serverId) {
+        String sql = String.format("""
+            SELECT COUNT(*) FROM `%sinventories`
+            WHERE `player_uuid` = ? AND `server_id` = ?
+            """, tablePrefix);
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, playerUuid.toString());
+            stmt.setString(2, serverId);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
+            }
+        } catch (SQLException e) {
+            logger.severe("Failed to check inventory existence for player " + playerUuid + ": " + e.getMessage());
+        }
+        
+        return false;
+    }
+    
     public void logSync(UUID playerUuid, String serverId, String syncType, String status, String errorMessage) {
         String sql = String.format("""
             INSERT INTO `%ssync_log` (`player_uuid`, `server_id`, `sync_type`, `status`, `error_message`)

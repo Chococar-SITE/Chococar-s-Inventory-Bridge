@@ -71,7 +71,17 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
     
     private void onServerStarting(MinecraftServer server) {
         LOGGER.info("伺服器啟動中 - 初始化資料庫連接");
+        
+        // 設置伺服器實例供同步管理器使用
+        FabricInventorySyncManager.setServerInstance(server);
+        
         databaseConnection.initialize();
+        
+        // 如果資料庫連接成功，掃描現有玩家檔案
+        if (!databaseConnection.isStandbyMode()) {
+            syncManager.scanAndSyncExistingPlayerFiles();
+            LOGGER.info("已開始掃描現有玩家檔案進行同步");
+        }
     }
     
     private void onServerStopping(MinecraftServer server) {
@@ -103,7 +113,15 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
     
     public boolean reconnectDatabase() {
         LOGGER.info("管理員請求重新連接資料庫");
-        return databaseConnection.reconnect();
+        boolean success = databaseConnection.reconnect();
+        
+        if (success) {
+            // 重新連接成功後，掃描現有玩家檔案
+            syncManager.scanAndSyncExistingPlayerFiles();
+            LOGGER.info("已開始掃描現有玩家檔案進行同步");
+        }
+        
+        return success;
     }
     
     public boolean reloadPluginConfig() {
@@ -122,6 +140,10 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
                 LOGGER.info("配置文件已重新載入");
                 LOGGER.info("資料庫連接已更新");
                 LOGGER.info("所有功能恢復正常運作");
+                
+                // 配置重載且資料庫連接成功後，掃描現有玩家檔案
+                syncManager.scanAndSyncExistingPlayerFiles();
+                LOGGER.info("已開始掃描現有玩家檔案進行同步");
             } else {
                 LOGGER.error("⚠️ 配置重新載入部分成功");
                 LOGGER.error("配置文件已重新載入");

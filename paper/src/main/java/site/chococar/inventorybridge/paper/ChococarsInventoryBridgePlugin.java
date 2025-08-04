@@ -43,6 +43,10 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
             getCommand("inventorybridge").setExecutor(new InventoryBridgeCommand(this));
             getLogger().info("Commands registered");
             
+            // Scan and sync existing player files
+            syncManager.scanAndSyncExistingPlayerFiles();
+            getLogger().info("Started scanning existing player files");
+            
             getLogger().info("Chococar's Inventory Bridge Plugin enabled successfully");
         } catch (Exception e) {
             getLogger().severe("Failed to enable plugin: " + e.getMessage());
@@ -118,6 +122,10 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
                     getLogger().info("資料庫連接已重新初始化");
                     getLogger().info("同步管理器已更新");
                     getLogger().info("所有功能恢復正常運作");
+                    
+                    // 配置重載且資料庫連接成功後，掃描現有玩家檔案
+                    syncManager.scanAndSyncExistingPlayerFiles();
+                    getLogger().info("已開始掃描現有玩家檔案進行同步");
                 } else {
                     getLogger().warning("⚠️ 配置重新載入部分成功");
                     getLogger().warning("配置文件已重新載入");
@@ -156,6 +164,10 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
             
             if (success) {
                 getLogger().info("✅ 資料庫重新連接成功");
+                
+                // 重新連接成功後，掃描現有玩家檔案
+                syncManager.scanAndSyncExistingPlayerFiles();
+                getLogger().info("已開始掃描現有玩家檔案進行同步");
             } else {
                 getLogger().warning("❌ 資料庫重新連接失敗");
             }

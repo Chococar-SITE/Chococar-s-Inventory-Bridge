@@ -59,9 +59,22 @@ tasks {
     }
     
     jar {
+        // 處理重複文件策略
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        
         // 包含 common 模組的類文件
         from(project(':common').sourceSets.main.output) {
             exclude 'META-INF/**'
+        }
+        
+        // 包含所有依賴項的類文件
+        from {
+            configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+        } {
+            exclude 'META-INF/**'
+            exclude '**/*.SF'
+            exclude '**/*.DSA'
+            exclude '**/*.RSA'
         }
         
         // 設置 Manifest

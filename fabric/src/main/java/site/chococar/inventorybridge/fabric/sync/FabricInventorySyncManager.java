@@ -21,6 +21,8 @@ public class FabricInventorySyncManager {
     private final ConfigurationManager config;
     private final Map<UUID, Long> lastSyncTimes = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> syncInProgress = new ConcurrentHashMap<>();
+    private volatile boolean hasScannedPlayerFiles = false;
+    private static net.minecraft.server.MinecraftServer serverInstance;
     
     public FabricInventorySyncManager(DatabaseConnection databaseConnection, ConfigurationManager config) {
         this.databaseConnection = databaseConnection;
@@ -286,5 +288,160 @@ public class FabricInventorySyncManager {
     
     public long getLastSyncTime(UUID playerUuid) {
         return lastSyncTimes.getOrDefault(playerUuid, 0L);
+    }
+    
+    public static void setServerInstance(net.minecraft.server.MinecraftServer server) {
+        serverInstance = server;
+    }
+    
+    private boolean hasInventory(UUID playerUuid, String serverId) {
+        String sql = String.format("""
+            SELECT COUNT(*) FROM `%sinventories`
+            WHERE `player_uuid` = ? AND `server_id` = ?
+            """, databaseConnection.getTablePrefix());
+        
+        try (Connection conn = databaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, playerUuid.toString());
+            stmt.setString(2, serverId);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
+            }
+        } catch (SQLException e) {
+            ChococarsInventoryBridgeFabric.getLogger().error("檢查玩家資料庫記錄失敗 - 玩家: " + playerUuid, e);
+        }
+        
+        return false;
+    }
+    
+    public void scanAndSyncExistingPlayerFiles() {
+        if (hasScannedPlayerFiles) {
+            ChococarsInventoryBridgeFabric.getLogger().info("重新掃描現有玩家檔案並同步至資料庫...");
+        } else {
+            ChococarsInventoryBridgeFabric.getLogger().info("開始掃描現有玩家檔案並同步至資料庫...");
+        }
+        
+        CompletableFuture.runAsync(() -> {
+            try {
+                if (serverInstance == null) {
+                    ChococarsInventoryBridgeFabric.getLogger().warn("無法獲取 Minecraft 伺服器實例");
+                    return;
+                }
+                
+                java.io.File worldDir = serverInstance.getSavePath(net.minecraft.util.WorldSavePath.ROOT).toFile();
+                java.io.File playerDataDir = new java.io.File(worldDir, "playerdata");
+                
+                if (!playerDataDir.exists() || !playerDataDir.isDirectory()) {
+                    ChococarsInventoryBridgeFabric.getLogger().warn("玩家資料資料夾不存在: " + playerDataDir.getPath());
+                    return;
+                }
+                
+                java.io.File[] playerFiles = playerDataDir.listFiles((dir, name) -> name.endsWith(".dat"));
+                if (playerFiles == null) {
+                    ChococarsInventoryBridgeFabric.getLogger().warn("無法讀取玩家資料檔案");
+                    return;
+                }
+                
+                int totalScanned = 0;
+                int totalSynced = 0;
+                String serverId = config.getString("sync.serverId", "server1");
+                
+                for (java.io.File playerFile : playerFiles) {
+                    try {
+                        String fileName = playerFile.getName();
+                        String uuidString = fileName.substring(0, fileName.length() - 4); // 移除 .dat
+                        UUID playerUuid = UUID.fromString(uuidString);
+                        
+                        totalScanned++;
+                        
+                        // 檢查資料庫中是否已存在此玩家資料
+                        if (!hasInventory(playerUuid, serverId)) {
+                            // 嘗試從檔案同步玩家資料
+                            if (syncPlayerFromFile(playerUuid, playerFile, serverId)) {
+                                totalSynced++;
+                                ChococarsInventoryBridgeFabric.getLogger().info("已同步玩家 " + playerUuid + " 的資料至資料庫");
+                            }
+                        }
+                        
+                    } catch (IllegalArgumentException e) {
+                        // 無效的 UUID 格式，跳過此檔案
+                        ChococarsInventoryBridgeFabric.getLogger().warn("跳過無效的玩家檔案: " + playerFile.getName());
+                    } catch (Exception e) {
+                        ChococarsInventoryBridgeFabric.getLogger().error("處理玩家檔案 " + playerFile.getName() + " 時發生錯誤", e);
+                    }
+                }
+                
+                ChococarsInventoryBridgeFabric.getLogger().info("玩家檔案掃描完成！掃描了 " + totalScanned + " 個檔案，同步了 " + totalSynced + " 個新玩家至資料庫");
+                hasScannedPlayerFiles = true;
+                
+            } catch (Exception e) {
+                ChococarsInventoryBridgeFabric.getLogger().error("掃描玩家檔案時發生錯誤", e);
+            }
+        });
+    }
+    
+    private boolean syncPlayerFromFile(UUID playerUuid, java.io.File playerFile, String serverId) {
+        try {
+            // 檢查是否為有效的玩家檔案
+            if (!playerFile.exists() || !playerFile.canRead()) {
+                ChococarsInventoryBridgeFabric.getLogger().warn("無法讀取玩家檔案: " + playerFile.getName());
+                return false;
+            }
+            
+            // 獲取在線玩家（如果存在）
+            ServerPlayerEntity onlinePlayer = serverInstance != null ? serverInstance.getPlayerManager().getPlayer(playerUuid) : null;
+            
+            String inventoryData;
+            String enderChestData = null;
+            int experience = 0;
+            int experienceLevel = 0;
+            float health = 20.0f;
+            int hunger = 20;
+            
+            if (onlinePlayer != null) {
+                // 如果玩家在線，直接讀取其資料
+                inventoryData = FabricItemSerializer.serializeInventory(onlinePlayer.getInventory());
+                if (config.getBoolean("sync.syncEnderChest", true)) {
+                    enderChestData = FabricItemSerializer.serializeInventory(onlinePlayer.getEnderChestInventory());
+                }
+                if (config.getBoolean("sync.syncExperience", true)) {
+                    experience = onlinePlayer.totalExperience;
+                    experienceLevel = onlinePlayer.experienceLevel;
+                }
+                if (config.getBoolean("sync.syncHealth", false)) {
+                    health = onlinePlayer.getHealth();
+                }
+                if (config.getBoolean("sync.syncHunger", false)) {
+                    hunger = onlinePlayer.getHungerManager().getFoodLevel();
+                }
+            } else {
+                // 玩家離線，創建初始記錄
+                inventoryData = createEmptyInventoryData();
+                ChococarsInventoryBridgeFabric.getLogger().info("玩家 " + playerUuid + " 離線，創建初始資料庫記錄");
+            }
+            
+            saveInventoryToDatabase(
+                playerUuid, serverId, inventoryData, enderChestData,
+                experience, experienceLevel, health, hunger,
+                config.getString("compatibility.minecraftVersion", "1.21.8"),
+                4082
+            );
+            
+            logSync(playerUuid, "INITIAL_SYNC", "SUCCESS", null);
+            return true;
+            
+        } catch (Exception e) {
+            ChococarsInventoryBridgeFabric.getLogger().error("同步玩家檔案 " + playerUuid + " 失敗", e);
+            logSync(playerUuid, "INITIAL_SYNC", "FAILED", e.getMessage());
+            return false;
+        }
+    }
+    
+    private String createEmptyInventoryData() {
+        // 創建一個空的物品欄資料字串
+        return "[]"; // 空的 JSON 陣列表示空物品欄
     }
 }
