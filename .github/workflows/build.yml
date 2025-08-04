@@ -18,15 +18,45 @@ on:
         - release
 
 jobs:
+  get-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.versions.outputs.versions }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Get supported versions
+      id: versions
+      run: |
+        python << 'EOF'
+        import json
+        import os
+        
+        with open('data/latest_versions.json', 'r') as f:
+            versions_data = json.load(f)
+        
+        complete_versions = [v for v, data in versions_data.items() if data['status'] == 'complete']
+        complete_versions.sort(key=lambda x: [int(i) for i in x.split('.')], reverse=True)
+        
+        print(f"支援的版本: {', '.join(complete_versions)}")
+        
+        github_output = os.environ.get('GITHUB_OUTPUT')
+        if github_output:
+            with open(github_output, 'a') as f:
+                f.write(f'versions={json.dumps(complete_versions)}\n')
+        EOF
+
   build-matrix:
+    needs: get-versions
     runs-on: ubuntu-latest
     strategy:
       matrix:
         platform:
           - fabric
           - paper
+        mc_version: ${{ fromJson(needs.get-versions.outputs.versions) }}
     
-    name: Build ${{ matrix.platform }} for all supported MC versions
+    name: Build ${{ matrix.platform }} for MC ${{ matrix.mc_version }}
     
     steps:
     - name: Checkout repository
@@ -44,69 +74,62 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
-        gradle-home-cache-cleanup: true
+        cache-cleanup: on-success
         
     - name: Make gradlew executable
       run: chmod +x ./gradlew
       
-    - name: Load version data and build all versions
+    - name: Load version data for MC ${{ matrix.mc_version }}
       run: |
-        echo "📋 讀取版本數據..."
+        echo "📋 讀取 MC ${{ matrix.mc_version }} 版本數據..."
         
         # 讀取並解析版本數據
         python << 'EOF'
         import json
         import os
         
+        mc_version = "${{ matrix.mc_version }}"
+        
         with open('data/latest_versions.json', 'r') as f:
             versions_data = json.load(f)
         
-        complete_versions = [v for v, data in versions_data.items() if data['status'] == 'complete']
-        complete_versions.sort(key=lambda x: [int(i) for i in x.split('.')], reverse=True)
+        if mc_version not in versions_data:
+            print(f"❌ 版本 {mc_version} 不存在於數據中")
+            exit(1)
         
-        print(f"支援的版本: {', '.join(complete_versions)}")
+        data = versions_data[mc_version]
         
-        # 為每個版本構建
-        for mc_version in complete_versions:
-            data = versions_data[mc_version]
-            
-            print(f"\n🔧 構建 {mc_version}...")
-            
-            # 設定基本版本號
-            if "${{ github.ref }}".startswith("refs/tags/"):
-                version = "${{ github.ref }}".split("/")[-1].replace("v", "")
-            else:
-                version = f"1.0.0-SNAPSHOT+mc{mc_version}"
-            
-            artifact_name = f"chococars-inventory-bridge-${{ matrix.platform }}-{mc_version}-{version}"
-            
-            print(f"構建配置:")
-            print(f"  Minecraft: {mc_version}")
-            print(f"  Yarn: {data['yarn_mappings']}")
-            print(f"  Fabric API: {data['fabric_api']}")
-            print(f"  Paper: {data['paper']}")
-            print(f"  Data Version: {data['data_version']}")
-            print(f"  Artifact: {artifact_name}")
+        if data['status'] != 'complete':
+            print(f"❌ 版本 {mc_version} 狀態不完整: {data['status']}")
+            exit(1)
         
-        # 將第一個版本設為預設值（供後續步驟使用）
-        if complete_versions:
-            default_version = complete_versions[0]
-            default_data = versions_data[default_version]
-            
-            with open(os.environ['GITHUB_ENV'], 'a') as env_file:
-                env_file.write(f"MC_VERSION={default_version}\n")
-                env_file.write(f"YARN_VERSION={default_data['yarn_mappings']}\n")
-                env_file.write(f"FABRIC_API_VERSION={default_data['fabric_api']}\n")
-                env_file.write(f"PAPER_VERSION={default_data['paper']}\n")
-                env_file.write(f"DATA_VERSION={default_data['data_version']}\n")
-                
-                if "${{ github.ref }}".startswith("refs/tags/"):
-                    version = "${{ github.ref }}".split("/")[-1].replace("v", "")
-                else:
-                    version = f"1.0.0-SNAPSHOT+mc{default_version}"
-                    
-                env_file.write(f"VERSION={version}\n")
-                env_file.write(f"ARTIFACT_NAME=chococars-inventory-bridge-${{ matrix.platform }}-{default_version}-{version}\n")
+        print(f"🔧 構建 {mc_version}...")
+        
+        # 設定基本版本號
+        if "${{ github.ref }}".startswith("refs/tags/"):
+            version = "${{ github.ref }}".split("/")[-1].replace("v", "")
+        else:
+            version = f"1.0.0-SNAPSHOT+mc{mc_version}"
+        
+        artifact_name = f"chococars-inventory-bridge-${{ matrix.platform }}-{mc_version}-{version}"
+        
+        print(f"構建配置:")
+        print(f"  Minecraft: {mc_version}")
+        print(f"  Yarn: {data['yarn_mappings']}")
+        print(f"  Fabric API: {data['fabric_api']}")
+        print(f"  Paper: {data['paper']}")
+        print(f"  Data Version: {data['data_version']}")
+        print(f"  Artifact: {artifact_name}")
+        
+        # 設置環境變量
+        with open(os.environ['GITHUB_ENV'], 'a') as env_file:
+            env_file.write(f"MC_VERSION={mc_version}\n")
+            env_file.write(f"YARN_VERSION={data['yarn_mappings']}\n")
+            env_file.write(f"FABRIC_API_VERSION={data['fabric_api']}\n")
+            env_file.write(f"PAPER_VERSION={data['paper']}\n")
+            env_file.write(f"DATA_VERSION={data['data_version']}\n")
+            env_file.write(f"VERSION={version}\n")
+            env_file.write(f"ARTIFACT_NAME={artifact_name}\n")
         EOF
         
     - name: Update version configurations
@@ -134,9 +157,9 @@ jobs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ matrix.minecraft_version }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        key: ${{ runner.os }}-gradle-${{ matrix.mc_version }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
         restore-keys: |
-          ${{ runner.os }}-gradle-${{ matrix.minecraft_version }}-
+          ${{ runner.os }}-gradle-${{ matrix.mc_version }}-
           ${{ runner.os }}-gradle-
           
     - name: Build common module
@@ -206,7 +229,7 @@ jobs:
         fi
 
   create-release:
-    needs: build-matrix
+    needs: [get-versions, build-matrix]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_type == 'release'
     
@@ -251,7 +274,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   cleanup:
-    needs: [build-matrix, create-release]
+    needs: [get-versions, build-matrix, create-release]
     runs-on: ubuntu-latest
     if: always()
     
