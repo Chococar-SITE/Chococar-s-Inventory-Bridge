@@ -30,6 +30,7 @@ dependencies {
     
     // 共通模組
     implementation project(':common')
+    include project(':common')
     
     // 測試依賴
     testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'
