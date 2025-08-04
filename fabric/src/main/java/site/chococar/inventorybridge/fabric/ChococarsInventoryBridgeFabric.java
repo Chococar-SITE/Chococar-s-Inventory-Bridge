@@ -42,11 +42,21 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         
         // 註冊玩家連接事件
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            syncManager.onPlayerJoin(handler.getPlayer());
+            if (!databaseConnection.isStandbyMode()) {
+                syncManager.onPlayerJoin(handler.getPlayer());
+            } else {
+                LOGGER.warn("玩家 {} 加入伺服器，但資料庫處於待機模式，跳過背包同步", 
+                    handler.getPlayer().getGameProfile().getName());
+            }
         });
         
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            syncManager.onPlayerLeave(handler.getPlayer());
+            if (!databaseConnection.isStandbyMode()) {
+                syncManager.onPlayerLeave(handler.getPlayer());
+            } else {
+                LOGGER.warn("玩家 {} 離開伺服器，但資料庫處於待機模式，跳過背包同步", 
+                    handler.getPlayer().getGameProfile().getName());
+            }
         });
         
         LOGGER.info("Chococar's Inventory Bridge 初始化完成");
@@ -82,5 +92,10 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
     
     public static FabricLogger getLogger() {
         return LOGGER;
+    }
+    
+    public boolean reconnectDatabase() {
+        LOGGER.info("管理員請求重新連接資料庫");
+        return databaseConnection.reconnect();
     }
 }

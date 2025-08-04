@@ -18,14 +18,26 @@ public class FabricLogger implements Logger {
         logger.info(message);
     }
     
+    public void info(String format, Object... args) {
+        logger.info(format, args);
+    }
+    
     @Override
     public void warn(String message) {
         logger.warn(message);
     }
     
+    public void warn(String format, Object... args) {
+        logger.warn(format, args);
+    }
+    
     @Override
     public void error(String message) {
         logger.error(message);
+    }
+    
+    public void error(String format, Object... args) {
+        logger.error(format, args);
     }
     
     @Override

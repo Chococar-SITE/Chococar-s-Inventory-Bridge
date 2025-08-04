@@ -363,7 +363,12 @@ jobs:
         # 複製我們的模組
         find . -name "*.jar" -path "*/chococars-inventory-bridge-*" -exec cp {} mods/ \;
         
-        # 接受 EULA (讓伺服器自己生成 server.properties)
+        # 創建基本的 server.properties 避免啟動錯誤
+        cat > server.properties << EOF
+        online-mode=false
+        EOF
+        
+        # 接受 EULA
         echo "eula=true" > eula.txt
         
         echo "✅ 伺服器設置完成"
@@ -401,9 +406,48 @@ jobs:
         
         # 檢查是否成功啟動
         if ! grep -q "Done" server.log; then
-          echo "❌ 伺服器啟動超時"
+          echo "❌ Fabric 伺服器啟動超時或失敗"
           echo "📋 伺服器日誌："
           cat server.log
+          
+          # 檢查是否有 crash report
+          echo ""
+          echo "🔍 檢查 crash reports..."
+          if [ -d "crash-reports" ] && [ "$(ls -A crash-reports 2>/dev/null)" ]; then
+            LATEST_CRASH=$(ls -t crash-reports/*.txt 2>/dev/null | head -n 1)
+            if [ -f "$LATEST_CRASH" ]; then
+              echo "💥 發現 crash report: $(basename "$LATEST_CRASH")"
+              echo "📋 Crash Report 摘要："
+              echo "────────────────────────────────────────────────────────────────"
+              
+              # 提取關鍵資訊
+              if grep -q "Exception" "$LATEST_CRASH"; then
+                echo "🚨 異常類型："
+                grep -A 5 -B 2 "Exception\|Error" "$LATEST_CRASH" | head -15
+                echo ""
+              fi
+              
+              if grep -q "Caused by:" "$LATEST_CRASH"; then
+                echo "🔍 根本原因："
+                grep -A 3 "Caused by:" "$LATEST_CRASH" | head -8
+                echo ""
+              fi
+              
+              if grep -q "at " "$LATEST_CRASH"; then
+                echo "📍 關鍵堆疊追蹤："
+                grep "at.*chococar\|at.*fabric\|at.*minecraft" "$LATEST_CRASH" | head -5
+                echo ""
+              fi
+              
+              echo "────────────────────────────────────────────────────────────────"
+              echo "📄 完整 crash report 文件: $LATEST_CRASH"
+            else
+              echo "⚠️ crash-reports 目錄存在但無法讀取文件"
+            fi
+          else
+            echo "ℹ️ 未發現 crash reports"
+          fi
+          
           kill $SERVER_PID 2>/dev/null || true
           exit 1
         fi
@@ -416,7 +460,17 @@ jobs:
         (
           for i in {1..60}; do
             if ! kill -0 $SERVER_PID 2>/dev/null; then
-              echo "❌ 伺服器意外停止"
+              echo "❌ Fabric 伺服器意外停止"
+              
+              # 檢查 crash report
+              if [ -d "crash-reports" ] && [ "$(ls -A crash-reports 2>/dev/null)" ]; then
+                LATEST_CRASH=$(ls -t crash-reports/*.txt 2>/dev/null | head -n 1)
+                if [ -f "$LATEST_CRASH" ]; then
+                  echo "💥 發現 crash report: $(basename "$LATEST_CRASH")"
+                  echo "🔍 根本原因："
+                  grep -A 3 "Caused by:" "$LATEST_CRASH" | head -5 || echo "無法提取原因"
+                fi
+              fi
               exit 1
             fi
             sleep 1
@@ -557,7 +611,12 @@ jobs:
         # 複製我們的 Paper 插件
         find . -name "*.jar" -path "*/chococars-inventory-bridge-paper-*" -exec cp {} plugins/ \;
         
-        # 接受 EULA (讓伺服器自己生成 server.properties)
+        # 創建基本的 server.properties 避免啟動錯誤
+        cat > server.properties << EOF
+        online-mode=false
+        EOF
+        
+        # 接受 EULA
         echo "eula=true" > eula.txt
         
         echo "✅ Paper 伺服器設置完成"
@@ -595,9 +654,48 @@ jobs:
         
         # 檢查是否成功啟動
         if ! grep -q "Done" server.log; then
-          echo "❌ Paper 伺服器啟動超時"
+          echo "❌ Paper 伺服器啟動超時或失敗"
           echo "📋 伺服器日誌："
           cat server.log
+          
+          # 檢查是否有 crash report
+          echo ""
+          echo "🔍 檢查 crash reports..."
+          if [ -d "crash-reports" ] && [ "$(ls -A crash-reports 2>/dev/null)" ]; then
+            LATEST_CRASH=$(ls -t crash-reports/*.txt 2>/dev/null | head -n 1)
+            if [ -f "$LATEST_CRASH" ]; then
+              echo "💥 發現 crash report: $(basename "$LATEST_CRASH")"
+              echo "📋 Crash Report 摘要："
+              echo "────────────────────────────────────────────────────────────────"
+              
+              # 提取關鍵資訊
+              if grep -q "Exception" "$LATEST_CRASH"; then
+                echo "🚨 異常類型："
+                grep -A 5 -B 2 "Exception\|Error" "$LATEST_CRASH" | head -15
+                echo ""
+              fi
+              
+              if grep -q "Caused by:" "$LATEST_CRASH"; then
+                echo "🔍 根本原因："
+                grep -A 3 "Caused by:" "$LATEST_CRASH" | head -8
+                echo ""
+              fi
+              
+              if grep -q "at " "$LATEST_CRASH"; then
+                echo "📍 關鍵堆疊追蹤："
+                grep "at.*chococar\|at.*paper\|at.*minecraft\|at.*bukkit" "$LATEST_CRASH" | head -5
+                echo ""
+              fi
+              
+              echo "────────────────────────────────────────────────────────────────"
+              echo "📄 完整 crash report 文件: $LATEST_CRASH"
+            else
+              echo "⚠️ crash-reports 目錄存在但無法讀取文件"
+            fi
+          else
+            echo "ℹ️ 未發現 crash reports"
+          fi
+          
           kill $SERVER_PID 2>/dev/null || true
           exit 1
         fi
@@ -611,6 +709,16 @@ jobs:
           for i in {1..60}; do
             if ! kill -0 $SERVER_PID 2>/dev/null; then
               echo "❌ Paper 伺服器意外停止"
+              
+              # 檢查 crash report
+              if [ -d "crash-reports" ] && [ "$(ls -A crash-reports 2>/dev/null)" ]; then
+                LATEST_CRASH=$(ls -t crash-reports/*.txt 2>/dev/null | head -n 1)
+                if [ -f "$LATEST_CRASH" ]; then
+                  echo "💥 發現 crash report: $(basename "$LATEST_CRASH")"
+                  echo "🔍 根本原因："
+                  grep -A 3 "Caused by:" "$LATEST_CRASH" | head -5 || echo "無法提取原因"
+                fi
+              fi
               exit 1
             fi
             sleep 1

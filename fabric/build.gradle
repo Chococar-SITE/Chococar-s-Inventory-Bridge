@@ -38,6 +38,9 @@ dependencies {
     include 'com.zaxxer:HikariCP:5.0.1'
     include 'com.google.code.gson:gson:2.10.1'
     
+    // 包含 SLF4J 實現 (避免日誌錯誤)
+    include 'org.slf4j:slf4j-simple:2.0.7'
+    
     // 測試依賴
     testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'
 }
