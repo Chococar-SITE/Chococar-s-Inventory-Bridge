@@ -52,7 +52,9 @@ public class DatabaseConnection {
         hikariConfig.setUsername(config.getString("database.username", "minecraft"));
         hikariConfig.setPassword(config.getString("database.password", "password"));
         hikariConfig.setMaximumPoolSize(config.getInt("database.maxPoolSize", 10));
-        hikariConfig.setConnectionTimeout(config.getInt("database.connectionTimeout", 10000)); // 縮短超時時間
+        hikariConfig.setConnectionTimeout(config.getInt("database.connectionTimeout", 5000)); // 進一步縮短超時時間
+        hikariConfig.setValidationTimeout(3000); // 驗證超時
+        hikariConfig.setLeakDetectionThreshold(10000); // 洩漏檢測
         hikariConfig.setDriverClassName("com.mysql.cj.jdbc.Driver");
         
         // 連接池優化
@@ -181,6 +183,19 @@ public class DatabaseConnection {
         LOGGER.info("嘗試重新連接資料庫...");
         
         try {
+            // First close existing connection to free resources quickly
+            if (dataSource != null && !dataSource.isClosed()) {
+                try {
+                    dataSource.close();
+                    LOGGER.debug("舊連接池已關閉");
+                } catch (Exception e) {
+                    LOGGER.warn("關閉舊連接池時發生錯誤: {}", e.getMessage());
+                }
+            }
+            
+            // Small delay to ensure clean shutdown
+            Thread.sleep(500);
+            
             attemptConnection();
             LOGGER.info("✅ 資料庫重新連接成功");
             LOGGER.info("背包同步功能已恢復正常運作");

@@ -1,11 +1,14 @@
 package site.chococar.inventorybridge.paper.commands;
 
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
+import site.chococar.inventorybridge.common.Constants;
 import site.chococar.inventorybridge.paper.ChococarsInventoryBridgePlugin;
 
 import java.util.ArrayList;
@@ -29,55 +32,81 @@ public class InventoryBridgeCommand implements CommandExecutor, TabCompleter {
         switch (args[0].toLowerCase()) {
             case "reload" -> {
                 if (!sender.hasPermission("chococars.inventorybridge.reload")) {
-                    sender.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
+                    sender.sendMessage(Component.text("You don't have permission to use this command!").color(NamedTextColor.RED));
                     return true;
                 }
                 
-                sender.sendMessage(ChatColor.YELLOW + "Reloading configuration...");
-                boolean success = plugin.reloadPluginConfig();
+                sender.sendMessage(Component.text("Reloading configuration...").color(NamedTextColor.YELLOW));
+                sender.sendMessage(Component.text("This operation is running asynchronously to prevent server lag.").color(NamedTextColor.GRAY));
                 
-                if (success) {
-                    sender.sendMessage(ChatColor.GREEN + "✅ Configuration reloaded successfully!");
-                    sender.sendMessage(ChatColor.GREEN + "Database connection updated, all features restored.");
-                } else {
-                    sender.sendMessage(ChatColor.RED + "❌ Configuration reload failed!");
-                    sender.sendMessage(ChatColor.RED + "Check console for detailed error information.");
-                }
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        boolean success = plugin.reloadPluginConfig();
+                        
+                        // Switch back to main thread for sending messages
+                        new BukkitRunnable() {
+                            @Override
+                            public void run() {
+                                if (success) {
+                                    sender.sendMessage(Component.text("✅ Configuration reloaded successfully!").color(NamedTextColor.GREEN));
+                                    sender.sendMessage(Component.text("Database connection updated, all features restored.").color(NamedTextColor.GREEN));
+                                } else {
+                                    sender.sendMessage(Component.text("❌ Configuration reload failed!").color(NamedTextColor.RED));
+                                    sender.sendMessage(Component.text("Check console for detailed error information.").color(NamedTextColor.RED));
+                                }
+                            }
+                        }.runTask(plugin);
+                    }
+                }.runTaskAsynchronously(plugin);
                 return true;
             }
             
             case "reconnect" -> {
                 if (!sender.hasPermission("chococars.inventorybridge.reload")) {
-                    sender.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
+                    sender.sendMessage(Component.text("You don't have permission to use this command!").color(NamedTextColor.RED));
                     return true;
                 }
                 
-                sender.sendMessage(ChatColor.YELLOW + "Reconnecting to database...");
-                boolean success = plugin.reconnectDatabase();
+                sender.sendMessage(Component.text("Reconnecting to database...").color(NamedTextColor.YELLOW));
+                sender.sendMessage(Component.text("This operation is running asynchronously to prevent server lag.").color(NamedTextColor.GRAY));
                 
-                if (success) {
-                    sender.sendMessage(ChatColor.GREEN + "✅ Database reconnected successfully!");
-                    sender.sendMessage(ChatColor.GREEN + "All inventory sync features are now active.");
-                } else {
-                    sender.sendMessage(ChatColor.RED + "❌ Database reconnection failed!");
-                    sender.sendMessage(ChatColor.RED + "Please check database settings and connection.");
-                }
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        boolean success = plugin.reconnectDatabase();
+                        
+                        // Switch back to main thread for sending messages
+                        new BukkitRunnable() {
+                            @Override
+                            public void run() {
+                                if (success) {
+                                    sender.sendMessage(Component.text("✅ Database reconnected successfully!").color(NamedTextColor.GREEN));
+                                    sender.sendMessage(Component.text("All inventory sync features are now active.").color(NamedTextColor.GREEN));
+                                } else {
+                                    sender.sendMessage(Component.text("❌ Database reconnection failed!").color(NamedTextColor.RED));
+                                    sender.sendMessage(Component.text("Please check database settings and connection.").color(NamedTextColor.RED));
+                                }
+                            }
+                        }.runTask(plugin);
+                    }
+                }.runTaskAsynchronously(plugin);
                 return true;
             }
             
             case "sync" -> {
                 if (!(sender instanceof Player player)) {
-                    sender.sendMessage(ChatColor.RED + "This command can only be used by players!");
+                    sender.sendMessage(Component.text("This command can only be used by players!").color(NamedTextColor.RED));
                     return true;
                 }
                 
                 if (!sender.hasPermission("chococars.inventorybridge.sync")) {
-                    sender.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
+                    sender.sendMessage(Component.text("You don't have permission to use this command!").color(NamedTextColor.RED));
                     return true;
                 }
                 
                 if (args.length < 2) {
-                    sender.sendMessage(ChatColor.RED + "Usage: /inventorybridge sync <load|save>");
+                    sender.sendMessage(Component.text("Usage: /inventorybridge sync <load|save>").color(NamedTextColor.RED));
                     return true;
                 }
                 
@@ -85,53 +114,62 @@ public class InventoryBridgeCommand implements CommandExecutor, TabCompleter {
                 boolean load = args[1].equalsIgnoreCase("load");
                 
                 if (!save && !load) {
-                    sender.sendMessage(ChatColor.RED + "Usage: /inventorybridge sync <load|save>");
+                    sender.sendMessage(Component.text("Usage: /inventorybridge sync <load|save>").color(NamedTextColor.RED));
                     return true;
                 }
                 
                 if (plugin.getSyncManager().isSyncInProgress(player.getUniqueId())) {
-                    sender.sendMessage(ChatColor.YELLOW + "Sync already in progress, please wait...");
+                    sender.sendMessage(Component.text("Sync already in progress, please wait...").color(NamedTextColor.YELLOW));
                     return true;
                 }
                 
+                sender.sendMessage(Component.text("Manual " + (save ? "save" : "load") + " initiated!").color(NamedTextColor.GREEN));
+                sender.sendMessage(Component.text("This operation is running asynchronously to prevent server lag.").color(NamedTextColor.GRAY));
+                
                 plugin.getSyncManager().manualSync(player, save);
-                sender.sendMessage(ChatColor.GREEN + "Manual " + (save ? "save" : "load") + " initiated!");
                 return true;
             }
             
             case "status" -> {
                 if (!(sender instanceof Player player)) {
-                    sender.sendMessage(ChatColor.RED + "This command can only be used by players!");
+                    sender.sendMessage(Component.text("This command can only be used by players!").color(NamedTextColor.RED));
                     return true;
                 }
                 
                 if (!sender.hasPermission("chococars.inventorybridge.sync")) {
-                    sender.sendMessage(ChatColor.RED + "You don't have permission to use this command!");
+                    sender.sendMessage(Component.text("You don't have permission to use this command!").color(NamedTextColor.RED));
                     return true;
                 }
                 
                 boolean inProgress = plugin.getSyncManager().isSyncInProgress(player.getUniqueId());
                 long lastSync = plugin.getSyncManager().getLastSyncTime(player.getUniqueId());
                 
-                sender.sendMessage(ChatColor.GOLD + "=== Inventory Bridge Status ===");
-                sender.sendMessage(ChatColor.YELLOW + "Sync in progress: " + (inProgress ? ChatColor.RED + "Yes" : ChatColor.GREEN + "No"));
+                sender.sendMessage(Component.text("=== Inventory Bridge Status ===").color(NamedTextColor.GOLD));
+                sender.sendMessage(Component.text("Sync in progress: ").color(NamedTextColor.YELLOW)
+                    .append(Component.text(inProgress ? "Yes" : "No").color(inProgress ? NamedTextColor.RED : NamedTextColor.GREEN)));
                 
                 if (lastSync > 0) {
                     long timeSince = (System.currentTimeMillis() - lastSync) / 1000;
-                    sender.sendMessage(ChatColor.YELLOW + "Last sync: " + ChatColor.WHITE + timeSince + " seconds ago");
+                    sender.sendMessage(Component.text("Last sync: ").color(NamedTextColor.YELLOW)
+                        .append(Component.text(timeSince + " seconds ago").color(NamedTextColor.WHITE)));
                 } else {
-                    sender.sendMessage(ChatColor.YELLOW + "Last sync: " + ChatColor.WHITE + "Never");
+                    sender.sendMessage(Component.text("Last sync: ").color(NamedTextColor.YELLOW)
+                        .append(Component.text("Never").color(NamedTextColor.WHITE)));
                 }
                 
                 return true;
             }
             
             case "info" -> {
-                sender.sendMessage(ChatColor.GOLD + "=== Chococar's Inventory Bridge ===");
-                sender.sendMessage(ChatColor.YELLOW + "Version: " + ChatColor.WHITE + plugin.getDescription().getVersion());
-                sender.sendMessage(ChatColor.YELLOW + "Author: " + ChatColor.WHITE + "chococar.site");
-                sender.sendMessage(ChatColor.YELLOW + "Minecraft Version: " + ChatColor.WHITE + plugin.getConfigManager().getMinecraftVersion());
-                sender.sendMessage(ChatColor.YELLOW + "Server ID: " + ChatColor.WHITE + plugin.getConfigManager().getServerId());
+                sender.sendMessage(Component.text("=== " + Constants.PLUGIN_NAME + " ===").color(NamedTextColor.GOLD));
+                sender.sendMessage(Component.text("Version: ").color(NamedTextColor.YELLOW)
+                    .append(Component.text(Constants.PLUGIN_VERSION).color(NamedTextColor.WHITE)));
+                sender.sendMessage(Component.text("Author: ").color(NamedTextColor.YELLOW)
+                    .append(Component.text(Constants.PLUGIN_AUTHOR).color(NamedTextColor.WHITE)));
+                sender.sendMessage(Component.text("Minecraft Version: ").color(NamedTextColor.YELLOW)
+                    .append(Component.text(plugin.getConfigManager().getMinecraftVersion()).color(NamedTextColor.WHITE)));
+                sender.sendMessage(Component.text("Server ID: ").color(NamedTextColor.YELLOW)
+                    .append(Component.text(plugin.getConfigManager().getServerId()).color(NamedTextColor.WHITE)));
                 return true;
             }
             
@@ -143,12 +181,17 @@ public class InventoryBridgeCommand implements CommandExecutor, TabCompleter {
     }
     
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "=== Chococar's Inventory Bridge Commands ===");
-        sender.sendMessage(ChatColor.YELLOW + "/ib reload" + ChatColor.WHITE + " - Reload configuration and reconnect database");
-        sender.sendMessage(ChatColor.YELLOW + "/ib reconnect" + ChatColor.WHITE + " - Reconnect to database only");
-        sender.sendMessage(ChatColor.YELLOW + "/ib sync <load|save>" + ChatColor.WHITE + " - Manually sync inventory");
-        sender.sendMessage(ChatColor.YELLOW + "/ib status" + ChatColor.WHITE + " - Check sync status");
-        sender.sendMessage(ChatColor.YELLOW + "/ib info" + ChatColor.WHITE + " - Show plugin information");
+        sender.sendMessage(Component.text("=== Chococar's Inventory Bridge Commands ===").color(NamedTextColor.GOLD));
+        sender.sendMessage(Component.text("/ib reload").color(NamedTextColor.YELLOW)
+            .append(Component.text(" - Reload configuration and reconnect database").color(NamedTextColor.WHITE)));
+        sender.sendMessage(Component.text("/ib reconnect").color(NamedTextColor.YELLOW)
+            .append(Component.text(" - Reconnect to database only").color(NamedTextColor.WHITE)));
+        sender.sendMessage(Component.text("/ib sync <load|save>").color(NamedTextColor.YELLOW)
+            .append(Component.text(" - Manually sync inventory").color(NamedTextColor.WHITE)));
+        sender.sendMessage(Component.text("/ib status").color(NamedTextColor.YELLOW)
+            .append(Component.text(" - Check sync status").color(NamedTextColor.WHITE)));
+        sender.sendMessage(Component.text("/ib info").color(NamedTextColor.YELLOW)
+            .append(Component.text(" - Show plugin information").color(NamedTextColor.WHITE)));
     }
     
     @Override
