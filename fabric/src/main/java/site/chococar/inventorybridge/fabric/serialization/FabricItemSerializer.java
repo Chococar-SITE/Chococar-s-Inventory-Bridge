@@ -266,16 +266,18 @@ public class FabricItemSerializer {
                 NbtCompound itemNbt = nbtList.getCompound(i);
                 if (itemNbt != null && !itemNbt.isEmpty()) {
                     // 讀取槽位
-                    int slot = itemNbt.getByte("Slot") & 255; // 無符號字節
-                    
-                    // 創建ItemStack並序列化
-                    var optionalItemStack = ItemStack.fromNbt(ChococarsInventoryBridgeFabric.getCurrentRegistryManager(), itemNbt);
-                    if (optionalItemStack.isPresent()) {
-                        ItemStack itemStack = optionalItemStack.get();
-                        if (!itemStack.isEmpty()) {
-                            String serializedItem = serializeItemStack(itemStack);
-                            if (serializedItem != null) {
-                                itemsJson.addProperty(String.valueOf(slot), serializedItem);
+                    if (itemNbt.contains("Slot")) {
+                        int slot = itemNbt.getByte("Slot") & 255; // 無符號字節
+                        
+                        // 創建ItemStack並序列化
+                        var optionalItemStack = ItemStack.fromNbt(ChococarsInventoryBridgeFabric.getCurrentRegistryManager(), itemNbt);
+                        if (optionalItemStack.isPresent()) {
+                            ItemStack itemStack = optionalItemStack.get();
+                            if (!itemStack.isEmpty()) {
+                                String serializedItem = serializeItemStack(itemStack);
+                                if (serializedItem != null) {
+                                    itemsJson.addProperty(String.valueOf(slot), serializedItem);
+                                }
                             }
                         }
                     }

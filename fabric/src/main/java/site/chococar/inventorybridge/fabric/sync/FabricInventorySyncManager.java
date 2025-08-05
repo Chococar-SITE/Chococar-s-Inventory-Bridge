@@ -441,31 +441,39 @@ public class FabricInventorySyncManager {
                     
                     if (playerData != null) {
                         // 讀取背包資料
-                        if (playerData.contains("Inventory", 9)) {
+                        if (playerData.contains("Inventory")) {
                             inventoryData = FabricItemSerializer.serializeNbtList(playerData.getList("Inventory", 10));
                         } else {
                             inventoryData = "[]"; // 如果沒有背包資料則為空
                         }
                         
                         // 讀取終界箱資料
-                        if (config.getBoolean("sync.syncEnderChest", true) && playerData.contains("EnderItems", 9)) {
+                        if (config.getBoolean("sync.syncEnderChest", true) && playerData.contains("EnderItems")) {
                             enderChestData = FabricItemSerializer.serializeNbtList(playerData.getList("EnderItems", 10));
                         }
                         
                         // 讀取經驗值
                         if (config.getBoolean("sync.syncExperience", true)) {
-                            experience = playerData.getInt("XpTotal");
-                            experienceLevel = playerData.getInt("XpLevel");
+                            if (playerData.contains("XpTotal")) {
+                                experience = playerData.getInt("XpTotal");
+                            }
+                            if (playerData.contains("XpLevel")) {
+                                experienceLevel = playerData.getInt("XpLevel");
+                            }
                         }
                         
                         // 讀取血量
                         if (config.getBoolean("sync.syncHealth", false)) {
-                            health = playerData.getFloat("Health");
+                            if (playerData.contains("Health")) {
+                                health = playerData.getFloat("Health");
+                            }
                         }
                         
                         // 讀取飢餓值
                         if (config.getBoolean("sync.syncHunger", false)) {
-                            hunger = playerData.getInt("foodLevel");
+                            if (playerData.contains("foodLevel")) {
+                                hunger = playerData.getInt("foodLevel");
+                            }
                         }
                         
                         ChococarsInventoryBridgeFabric.getLogger().info("從檔案讀取玩家 " + playerUuid + " 的離線資料並同步至資料庫");
