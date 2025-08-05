@@ -4,12 +4,6 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.craftbukkit.v1_21_R3.inventory.CraftItemStack;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtAccounter;
-import java.io.FileInputStream;
 import site.chococar.inventorybridge.paper.config.PaperConfigManager;
 import site.chococar.inventorybridge.paper.database.PaperDatabaseManager;
 import site.chococar.inventorybridge.paper.database.PaperInventoryData;
@@ -324,35 +318,9 @@ public class PaperInventorySyncManager {
                         hunger = onlinePlayer.getFoodLevel();
                     }
                 } else {
-                    // 玩家離線，嘗試從NBT檔案讀取真實背包資料
-                    try {
-                        PaperNBTInventoryData nbtData = readPlayerNBTData(playerFile);
-                        if (nbtData != null) {
-                            inventoryData = nbtData.inventoryData;
-                            if (config.isSyncEnderChest() && nbtData.enderChestData != null) {
-                                enderChestData = nbtData.enderChestData;
-                            }
-                            if (config.isSyncExperience()) {
-                                experience = nbtData.experience;
-                                experienceLevel = nbtData.experienceLevel;
-                            }
-                            if (config.isSyncHealth()) {
-                                health = nbtData.health;
-                            }
-                            if (config.isSyncHunger()) {
-                                hunger = nbtData.hunger;
-                            }
-                            logger.info("從檔案讀取玩家 " + playerUuid + " 的離線資料並同步至資料庫");
-                        } else {
-                            logger.warning("無法讀取玩家 " + playerUuid + " 的檔案資料，跳過同步");
-                            databaseManager.logSync(playerUuid, config.getServerId(), "INITIAL_SYNC", "FAILED", "無法讀取玩家檔案資料");
-                            return false;
-                        }
-                    } catch (Exception nbtException) {
-                        logger.warning("讀取玩家 " + playerUuid + " 離線檔案失敗，跳過同步: " + nbtException.getMessage());
-                        databaseManager.logSync(playerUuid, config.getServerId(), "INITIAL_SYNC", "FAILED", "檔案讀取異常: " + nbtException.getMessage());
-                        return false;
-                    }
+                    // 玩家離線，Paper NBT讀取功能暫未實現
+                    logger.info("玩家 " + playerUuid + " 離線，Paper NBT讀取功能尚未實現，使用預設空資料");
+                    inventoryData = "[]"; // 空的背包資料
                 }
                 
                 databaseManager.saveInventory(
@@ -386,117 +354,6 @@ public class PaperInventorySyncManager {
     }
     
     
-    /**
-     * NBT庫存資料結構
-     */
-    private static class PaperNBTInventoryData {
-        final String inventoryData;
-        final String enderChestData;
-        final int experience;
-        final int experienceLevel;
-        final double health;
-        final int hunger;
-        
-        PaperNBTInventoryData(String inventoryData, String enderChestData, 
-                            int experience, int experienceLevel, 
-                            double health, int hunger) {
-            this.inventoryData = inventoryData;
-            this.enderChestData = enderChestData;
-            this.experience = experience;
-            this.experienceLevel = experienceLevel;
-            this.health = health;
-            this.hunger = hunger;
-        }
-    }
     
-    /**
-     * 從NBT檔案讀取玩家資料 (Paper實現)
-     */
-    private PaperNBTInventoryData readPlayerNBTData(java.io.File playerFile) {
-        try {
-            // 使用Paper的NBT API讀取玩家檔案
-            CompoundTag playerData = NbtIo.readCompressed(new FileInputStream(playerFile), NbtAccounter.unlimitedHeap());
-            
-            if (playerData == null) {
-                return null;
-            }
-            
-            String inventoryData = "[]";
-            String enderChestData = null;
-            int experience = 0;
-            int experienceLevel = 0;
-            double health = 20.0;
-            int hunger = 20;
-            
-            // 讀取背包資料
-            if (playerData.contains("Inventory", 9)) {
-                ListTag inventoryList = playerData.getList("Inventory", 10);
-                inventoryData = serializeNbtListToPaper(inventoryList);
-            }
-            
-            // 讀取終界箱資料
-            if (playerData.contains("EnderItems", 9)) {
-                ListTag enderList = playerData.getList("EnderItems", 10);
-                enderChestData = serializeNbtListToPaper(enderList);
-            }
-            
-            // 讀取經驗值
-            if (playerData.contains("XpTotal")) {
-                experience = playerData.getInt("XpTotal");
-            }
-            if (playerData.contains("XpLevel")) {
-                experienceLevel = playerData.getInt("XpLevel");
-            }
-            
-            // 讀取血量
-            if (playerData.contains("Health")) {
-                health = playerData.getFloat("Health");
-            }
-            
-            // 讀取飢餓值
-            if (playerData.contains("foodLevel")) {
-                hunger = playerData.getInt("foodLevel");
-            }
-            
-            return new PaperNBTInventoryData(inventoryData, enderChestData, 
-                                           experience, experienceLevel, 
-                                           health, hunger);
-            
-        } catch (Exception e) {
-            logger.warning("讀取NBT檔案失敗: " + e.getMessage());
-            return null;
-        }
-    }
     
-    /**
-     * 將NBT清單序列化為Paper格式的字串
-     */
-    private String serializeNbtListToPaper(ListTag nbtList) {
-        if (nbtList == null || nbtList.isEmpty()) {
-            return "[]";
-        }
-        
-        try {
-            ItemStack[] items = new ItemStack[41]; // 預設背包大小
-            
-            for (int i = 0; i < nbtList.size(); i++) {
-                CompoundTag itemNbt = nbtList.getCompound(i);
-                if (itemNbt != null && !itemNbt.isEmpty()) {
-                    // 讀取槽位
-                    int slot = itemNbt.getByte("Slot") & 255;
-                    if (slot < items.length) {
-                        // 使用Paper/CraftBukkit API轉換NBT到ItemStack
-                        net.minecraft.world.item.ItemStack nmsStack = net.minecraft.world.item.ItemStack.of(itemNbt);
-                        items[slot] = CraftItemStack.asBukkitCopy(nmsStack);
-                    }
-                }
-            }
-            
-            return PaperItemSerializer.serializeInventoryArray(items);
-            
-        } catch (Exception e) {
-            logger.warning("序列化NBT清單失敗: " + e.getMessage());
-            return "[]";
-        }
-    }
 }
