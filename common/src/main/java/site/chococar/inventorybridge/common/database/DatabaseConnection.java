@@ -163,9 +163,39 @@ public class DatabaseConnection {
             stmt.executeUpdate();
             LOGGER.info("同步日誌表ENUM值遷移成功，已添加INITIAL_SYNC類型");
         } catch (SQLException e) {
-            // 如果是新表或已經包含該值，則忽略錯誤
-            if (!e.getMessage().contains("Duplicate value") && !e.getMessage().contains("Data truncation")) {
-                LOGGER.debug("同步日誌表ENUM遷移: {}", e.getMessage());
+            LOGGER.warn("同步日誌表ENUM遷移失敗: " + e.getMessage());
+            // 如果遷移失敗，嘗試重新創建表
+            try {
+                recreateSyncLogTable();
+            } catch (Exception recreateE) {
+                LOGGER.error("重新創建同步日誌表失敗", recreateE);
+            }
+        }
+    }
+    
+    private void recreateSyncLogTable() throws SQLException {
+        String dropSql = String.format("DROP TABLE IF EXISTS `%ssync_log`", tablePrefix);
+        String createSql = String.format("""
+            CREATE TABLE `%ssync_log` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `player_uuid` VARCHAR(36) NOT NULL,
+                `server_id` VARCHAR(64) NOT NULL,
+                `sync_type` ENUM('JOIN', 'LEAVE', 'MANUAL', 'AUTO', 'INITIAL_SYNC') NOT NULL,
+                `status` ENUM('SUCCESS', 'FAILED') NOT NULL,
+                `error_message` TEXT,
+                `timestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_player_uuid` (`player_uuid`),
+                INDEX `idx_timestamp` (`timestamp`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """, tablePrefix);
+        
+        try (Connection conn = getConnection()) {
+            try (PreparedStatement dropStmt = conn.prepareStatement(dropSql)) {
+                dropStmt.executeUpdate();
+            }
+            try (PreparedStatement createStmt = conn.prepareStatement(createSql)) {
+                createStmt.executeUpdate();
+                LOGGER.info("重新創建同步日誌表成功，包含INITIAL_SYNC類型");
             }
         }
     }
