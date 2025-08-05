@@ -385,11 +385,6 @@ public class PaperInventorySyncManager {
         }
     }
     
-    private String createEmptyInventoryData() {
-        // 創建一個空的物品欄資料字串
-        // 這裡使用簡化的空物品欄表示
-        return "[]"; // 空的 JSON 陣列表示空物品欄
-    }
     
     /**
      * NBT庫存資料結構

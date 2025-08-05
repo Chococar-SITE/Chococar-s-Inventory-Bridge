@@ -498,17 +498,7 @@ public class FabricInventorySyncManager {
         }
     }
     
-    private String createEmptyInventoryData() {
-        // 創建一個空的物品欄資料字串
-        return "[]"; // 空的 JSON 陣列表示空物品欄
-    }
     
-    /**
-     * 設置伺服器實例 (在伺服器啟動時調用)
-     */
-    public static void setServerInstance(net.minecraft.server.MinecraftServer server) {
-        serverInstance = server;
-    }
     
     /**
      * 獲取伺服器實例

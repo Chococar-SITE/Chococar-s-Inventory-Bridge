@@ -129,7 +129,7 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
             getLogger().info("配置文件重新載入成功");
             
             // 重新初始化資料庫連接（使用新配置）
-            boolean dbReconnected = databaseManager.reconnect();
+            databaseManager.reconnect();
             
             // 重新初始化同步管理器
             syncManager = new PaperInventorySyncManager(databaseManager);
@@ -178,17 +178,4 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
         return success;
     }
     
-    private boolean testDatabaseConnection() {
-        try {
-            if (databaseManager != null && databaseManager.getConnection() != null) {
-                try (var connection = databaseManager.getConnection()) {
-                    return connection.isValid(5);
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            getLogger().warning("資料庫連接測試失敗: " + e.getMessage());
-            return false;
-        }
-    }
 }

@@ -7,7 +7,6 @@ import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.BundleContentsComponent;
-import net.minecraft.component.type.CustomModelDataComponent;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
@@ -41,8 +40,8 @@ public class FabricItemSerializer {
         
         // 處理自定義模型數據
         if (itemStack.contains(DataComponentTypes.CUSTOM_MODEL_DATA)) {
-            CustomModelDataComponent customModelData = itemStack.get(DataComponentTypes.CUSTOM_MODEL_DATA);
             // 注釋掉因為 API 已改變
+            // CustomModelDataComponent customModelData = itemStack.get(DataComponentTypes.CUSTOM_MODEL_DATA);
             // componentsJson.addProperty("custom_model_data", customModelData.getValue());
         }
         
@@ -139,8 +138,8 @@ public class FabricItemSerializer {
                 
                 // 應用自定義模型數據
                 if (componentsJson.has("custom_model_data")) {
-                    int customModelData = componentsJson.get("custom_model_data").getAsInt();
                     // 注釋掉因為 API 已改變
+                    // int customModelData = componentsJson.get("custom_model_data").getAsInt();
                     // itemStack.set(DataComponentTypes.CUSTOM_MODEL_DATA, new CustomModelDataComponent(customModelData));
                 }
                 
@@ -177,13 +176,12 @@ public class FabricItemSerializer {
                 if (componentsJson.has("bundle_contents") && itemStack.getItem().toString().contains("bundle")) {
                     JsonObject bundleJson = componentsJson.getAsJsonObject("bundle_contents");
                     if (bundleJson.has("items")) {
-                        List<String> itemStrings = GSON.fromJson(bundleJson.get("items"), new TypeToken<List<String>>(){}.getType());
-                        List<ItemStack> bundleItems = itemStrings.stream()
-                                .map(FabricItemSerializer::deserializeItemStack)
-                                .filter(stack -> !stack.isEmpty())
-                                .toList();
-                        
                         // 注釋掉因為 API 已改變
+                        // List<String> itemStrings = GSON.fromJson(bundleJson.get("items"), new TypeToken<List<String>>(){}.getType());
+                        // List<ItemStack> bundleItems = itemStrings.stream()
+                        //         .map(FabricItemSerializer::deserializeItemStack)
+                        //         .filter(stack -> !stack.isEmpty())
+                        //         .toList();
                         // BundleContentsComponent.Builder builder = new BundleContentsComponent.Builder();
                         // bundleItems.forEach(builder::add);
                         // itemStack.set(DataComponentTypes.BUNDLE_CONTENTS, builder.build());
@@ -227,7 +225,6 @@ public class FabricItemSerializer {
         
         try {
             JsonObject json = JsonParser.parseString(data).getAsJsonObject();
-            String version = json.has("minecraft_version") ? json.get("minecraft_version").getAsString() : "unknown";
             
             if (json.has("items")) {
                 JsonObject itemsJson = json.getAsJsonObject("items");
