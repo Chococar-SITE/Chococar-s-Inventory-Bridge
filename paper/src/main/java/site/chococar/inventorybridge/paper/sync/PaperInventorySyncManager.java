@@ -145,7 +145,7 @@ public class PaperInventorySyncManager {
                 health,
                 hunger,
                 config.getMinecraftVersion(),
-                4082 // Current data version for 1.21.8
+                getCurrentDataVersion() // 動態獲取當前數據版本
         );
     }
     
@@ -359,7 +359,7 @@ public class PaperInventorySyncManager {
                     health,
                     hunger,
                     config.getMinecraftVersion(),
-                    4082 // 目前資料版本
+                    getCurrentDataVersion() // 動態獲取當前數據版本
                 );
                 
                 databaseManager.logSync(playerUuid, config.getServerId(), "INITIAL_SYNC", "SUCCESS", null);
@@ -433,13 +433,6 @@ public class PaperInventorySyncManager {
         try {
             logger.info("正在讀取玩家NBT檔案: " + playerFile.getName());
             
-            String inventoryData = "[]"; // 預設空背包
-            String enderChestData = "[]"; // 預設空終界箱，避免null
-            int experience = 0;
-            int experienceLevel = 0;
-            double health = 20.0;
-            int hunger = 20;
-            
             // 檢查檔案是否存在且可讀
             if (playerFile.length() > 0 && playerFile.canRead()) {
                 try {
@@ -471,36 +464,44 @@ public class PaperInventorySyncManager {
                                 // 讀取玩家的基本資料
                                 NBTPlayerData nbtData = readNBTPlayerData(dis, fileSize);
                                 if (nbtData != null) {
-                                    inventoryData = nbtData.inventoryData;
-                                    enderChestData = nbtData.enderChestData;
-                                    experience = nbtData.experience;
-                                    experienceLevel = nbtData.experienceLevel;
-                                    health = nbtData.health;
-                                    hunger = nbtData.hunger;
-                                    
                                     logger.info("成功讀取玩家 " + playerUuid + " 的實際NBT資料");
+                                    
+                                    // 關閉流
+                                    dis.close();
+                                    fis.close();
+                                    
+                                    return new PaperNBTInventoryData(
+                                        nbtData.inventoryData,
+                                        nbtData.enderChestData,
+                                        nbtData.experience,
+                                        nbtData.experienceLevel,
+                                        nbtData.health,
+                                        nbtData.hunger
+                                    );
                                 } else {
-                                    logger.info("無法完整讀取NBT資料，使用基本格式");
-                                    inventoryData = createBasicInventoryPlaceholder();
+                                    logger.warning("無法讀取NBT資料，跳過此玩家的同步");
+                                    dis.close();
+                                    fis.close();
+                                    return null;
                                 }
+                            } else {
+                                logger.warning("NBT檔案格式錯誤，跳過此玩家的同步");
+                                dis.close();
+                                fis.close();
+                                return null;
                             }
                         } else {
-                            logger.info("玩家從未遊玩過，使用預設資料");
+                            logger.info("玩家從未遊玩過，跳過同步");
+                            dis.close();
+                            fis.close();
+                            return null;
                         }
                     } catch (Exception nbtReadException) {
-                        logger.warning("NBT詳細讀取失敗，使用安全預設值: " + nbtReadException.getMessage());
-                        // 保持預設值
+                        logger.warning("NBT讀取失敗，跳過此玩家的同步: " + nbtReadException.getMessage());
+                        dis.close();
+                        fis.close();
+                        return null;
                     }
-                    
-                    // 關閉流
-                    dis.close();
-                    fis.close();
-                    
-                    logger.info("成功處理玩家檔案 " + playerFile.getName());
-                    
-                    return new PaperNBTInventoryData(inventoryData, enderChestData, 
-                                                   experience, experienceLevel, 
-                                                   health, hunger);
                     
                 } catch (java.io.IOException e) {
                     logger.warning("讀取NBT檔案時發生IO錯誤: " + e.getMessage());
@@ -518,11 +519,55 @@ public class PaperInventorySyncManager {
     }
     
     /**
+     * 動態獲取當前數據版本
+     */
+    private int getCurrentDataVersion() {
+        try {
+            // 嘗試使用更現代的方法獲取數據版本
+            String version = getCurrentVersion();
+            
+            // 根據版本號推斷數據版本
+            if (version.startsWith("1.21.4")) {
+                return 4071;
+            } else if (version.startsWith("1.21.5")) {
+                return 4073;
+            } else if (version.startsWith("1.21.6")) {
+                return 4076;
+            } else if (version.startsWith("1.21.7")) {
+                return 4079;
+            } else if (version.startsWith("1.21.8")) {
+                return 4082;
+            } else if (version.startsWith("1.21")) {
+                // 對於其他 1.21.x 版本，使用合理的預設值
+                return 4071;
+            } else {
+                logger.warning("未知的 Minecraft 版本: " + version + "，使用預設數據版本");
+                return 4071;
+            }
+        } catch (Exception e) {
+            logger.warning("無法獲取數據版本，使用預設值: " + e.getMessage());
+            return 4071; // 1.21.4 的數據版本
+        }
+    }
+    
+    /**
+     * 動態獲取當前 Minecraft 版本
+     */
+    private String getCurrentVersion() {
+        try {
+            return org.bukkit.Bukkit.getMinecraftVersion();
+        } catch (Exception e) {
+            logger.warning("無法獲取 Minecraft 版本，使用預設值: " + e.getMessage());
+            return getConfigManager().getMinecraftVersion();
+        }
+    }
+    
+    /**
      * 創建基本的背包佔位資料，避免完全空白
      */
     private String createBasicInventoryPlaceholder() {
         // 返回一個基本的JSON結構，表示空背包但格式正確
-        return "{\"size\":41,\"minecraft_version\":\"1.21.8\",\"data_version\":4082,\"items\":{}}";
+        return "{\"size\":41,\"minecraft_version\":\"" + getCurrentVersion() + "\",\"data_version\":" + getCurrentDataVersion() + ",\"items\":{}}";
     }
     
     /**
@@ -530,7 +575,7 @@ public class PaperInventorySyncManager {
      */
     private NBTPlayerData readNBTPlayerData(java.io.DataInputStream dis, long fileSize) {
         try {
-            logger.info("開始解析NBT資料，檔案大小: " + fileSize + " bytes");
+            logger.info("開始解析真實的NBT資料，檔案大小: " + fileSize + " bytes");
             
             // 初始化預設值
             String inventoryData = "[]";
@@ -539,67 +584,227 @@ public class PaperInventorySyncManager {
             int experienceLevel = 0;
             double health = 20.0;
             int hunger = 20;
-            boolean foundPlayerData = false;
             
-            // 嘗試讀取一些基本的NBT結構
-            // 由於完整的NBT解析很複雜，我們採取簡化的方法
-            try {
-                // 跳過一些位元組來尋找可能的資料標記
-                byte[] buffer = new byte[Math.min(1024, (int)fileSize)];
-                dis.read(buffer);
-                
-                // 檢查是否包含一些常見的Minecraft NBT標記
-                String bufferStr = new String(buffer, java.nio.charset.StandardCharsets.ISO_8859_1);
-                
-                if (bufferStr.contains("Inventory") || bufferStr.contains("Items")) {
-                    logger.info("在NBT資料中發現背包相關標記");
-                    foundPlayerData = true;
-                    
-                    // 創建一個更詳細的背包結構，表示玩家可能有物品
-                    inventoryData = "{\"size\":41,\"minecraft_version\":\"1.21.8\",\"data_version\":4082,\"items\":{\"0\":\"{\\\"id\\\":\\\"minecraft:stone\\\",\\\"count\\\":1}\"}}";
-                }
-                
-                if (bufferStr.contains("EnderItems")) {
-                    logger.info("在NBT資料中發現終界箱相關標記");
-                    enderChestData = "{\"size\":27,\"minecraft_version\":\"1.21.8\",\"data_version\":4082,\"items\":{}}";
-                }
-                
-                // 嘗試找到經驗值標記
-                if (bufferStr.contains("XpLevel") || bufferStr.contains("XpTotal")) {
-                    logger.info("在NBT資料中發現經驗值相關標記");
-                    experienceLevel = 10; // 給一個合理的預設值
-                    experience = 100;
-                }
-                
-                // 嘗試找到生命值標記
-                if (bufferStr.contains("Health")) {
-                    logger.info("在NBT資料中發現生命值相關標記");
-                    health = 18.0; // 稍微低於滿血
-                }
-                
-                // 嘗試找到飢餓值標記
-                if (bufferStr.contains("foodLevel")) {
-                    logger.info("在NBT資料中發現飢餓值相關標記");
-                    hunger = 18;
-                }
-                
-            } catch (Exception parseException) {
-                logger.warning("NBT資料解析時發生錯誤: " + parseException.getMessage());
+            // 讀取NBT根標籤
+            NBTCompound rootTag = readNBTCompound(dis);
+            if (rootTag == null) {
+                logger.warning("無法讀取NBT根標籤");
+                return null;
             }
             
-            if (foundPlayerData) {
-                logger.info("成功從NBT檔案中提取玩家資料");
-                return new NBTPlayerData(inventoryData, enderChestData, experience, experienceLevel, health, hunger);
-            } else {
-                logger.info("NBT檔案中未找到明確的玩家資料，但檔案有效");
-                // 即使沒找到具體資料，也返回格式正確的空資料
-                return new NBTPlayerData(createBasicInventoryPlaceholder(), "[]", 0, 0, 20.0, 20);
+            logger.info("成功讀取NBT根標籤，包含 " + rootTag.size() + " 個欄位");
+            
+            // 讀取背包資料
+            if (rootTag.containsKey("Inventory")) {
+                java.util.List<NBTCompound> inventoryList = rootTag.getList("Inventory");
+                if (inventoryList != null && !inventoryList.isEmpty()) {
+                    inventoryData = convertInventoryToJson(inventoryList);
+                    logger.info("成功讀取背包資料，包含 " + inventoryList.size() + " 個物品");
+                }
             }
+            
+            // 讀取終界箱資料
+            if (rootTag.containsKey("EnderItems")) {
+                java.util.List<NBTCompound> enderList = rootTag.getList("EnderItems");
+                if (enderList != null && !enderList.isEmpty()) {
+                    enderChestData = convertInventoryToJson(enderList);
+                    logger.info("成功讀取終界箱資料，包含 " + enderList.size() + " 個物品");
+                }
+            }
+            
+            // 讀取經驗值
+            if (rootTag.containsKey("XpLevel")) {
+                experienceLevel = rootTag.getInt("XpLevel");
+                logger.info("讀取到經驗等級: " + experienceLevel);
+            }
+            if (rootTag.containsKey("XpTotal")) {
+                experience = rootTag.getInt("XpTotal");
+                logger.info("讀取到總經驗: " + experience);
+            }
+            
+            // 讀取生命值
+            if (rootTag.containsKey("Health")) {
+                health = rootTag.getFloat("Health");
+                logger.info("讀取到生命值: " + health);
+            }
+            
+            // 讀取飢餓值
+            if (rootTag.containsKey("foodLevel")) {
+                hunger = rootTag.getInt("foodLevel");
+                logger.info("讀取到飢餓值: " + hunger);
+            }
+            
+            logger.info("成功解析完整的NBT玩家資料");
+            return new NBTPlayerData(inventoryData, enderChestData, experience, experienceLevel, health, hunger);
             
         } catch (Exception e) {
             logger.warning("讀取NBT玩家資料失敗: " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
+    }
+    
+    /**
+     * 簡單的NBT Compound類別
+     */
+    private static class NBTCompound {
+        private final java.util.Map<String, Object> data = new java.util.HashMap<>();
+        
+        public boolean containsKey(String key) {
+            return data.containsKey(key);
+        }
+        
+        public int getInt(String key) {
+            Object value = data.get(key);
+            if (value instanceof Integer) return (Integer) value;
+            if (value instanceof Number) return ((Number) value).intValue();
+            return 0;
+        }
+        
+        public float getFloat(String key) {
+            Object value = data.get(key);
+            if (value instanceof Float) return (Float) value;
+            if (value instanceof Number) return ((Number) value).floatValue();
+            return 0.0f;
+        }
+        
+        public String getString(String key) {
+            Object value = data.get(key);
+            return value instanceof String ? (String) value : "";
+        }
+        
+        @SuppressWarnings("unchecked")
+        public java.util.List<NBTCompound> getList(String key) {
+            Object value = data.get(key);
+            return value instanceof java.util.List ? (java.util.List<NBTCompound>) value : new java.util.ArrayList<>();
+        }
+        
+        public void put(String key, Object value) {
+            data.put(key, value);
+        }
+        
+        public int size() {
+            return data.size();
+        }
+    }
+    
+    /**
+     * 讀取NBT Compound標籤
+     */
+    private NBTCompound readNBTCompound(java.io.DataInputStream dis) throws java.io.IOException {
+        NBTCompound compound = new NBTCompound();
+        
+        while (true) {
+            byte tagType = dis.readByte();
+            if (tagType == 0) break; // TAG_End
+            
+            String name = dis.readUTF();
+            Object value = readNBTValue(dis, tagType);
+            
+            if (value != null) {
+                compound.put(name, value);
+                logger.fine("讀取NBT標籤: " + name + " (類型: " + tagType + ")");
+            }
+        }
+        
+        return compound;
+    }
+    
+    /**
+     * 根據類型讀取NBT值
+     */
+    private Object readNBTValue(java.io.DataInputStream dis, byte tagType) throws java.io.IOException {
+        switch (tagType) {
+            case 1: // TAG_Byte
+                return dis.readByte();
+            case 2: // TAG_Short
+                return dis.readShort();
+            case 3: // TAG_Int
+                return dis.readInt();
+            case 4: // TAG_Long
+                return dis.readLong();
+            case 5: // TAG_Float
+                return dis.readFloat();
+            case 6: // TAG_Double
+                return dis.readDouble();
+            case 8: // TAG_String
+                return dis.readUTF();
+            case 9: // TAG_List
+                return readNBTList(dis);
+            case 10: // TAG_Compound
+                return readNBTCompound(dis);
+            case 7: // TAG_Byte_Array
+                int byteArrayLength = dis.readInt();
+                byte[] byteArray = new byte[byteArrayLength];
+                dis.readFully(byteArray);
+                return byteArray;
+            case 11: // TAG_Int_Array
+                int intArrayLength = dis.readInt();
+                int[] intArray = new int[intArrayLength];
+                for (int i = 0; i < intArrayLength; i++) {
+                    intArray[i] = dis.readInt();
+                }
+                return intArray;
+            case 12: // TAG_Long_Array
+                int longArrayLength = dis.readInt();
+                long[] longArray = new long[longArrayLength];
+                for (int i = 0; i < longArrayLength; i++) {
+                    longArray[i] = dis.readLong();
+                }
+                return longArray;
+            default:
+                logger.warning("未知的NBT標籤類型: " + tagType);
+                return null;
+        }
+    }
+    
+    /**
+     * 讀取NBT List
+     */
+    private java.util.List<NBTCompound> readNBTList(java.io.DataInputStream dis) throws java.io.IOException {
+        byte listType = dis.readByte();
+        int listLength = dis.readInt();
+        
+        java.util.List<NBTCompound> list = new java.util.ArrayList<>();
+        
+        for (int i = 0; i < listLength; i++) {
+            if (listType == 10) { // TAG_Compound
+                list.add(readNBTCompound(dis));
+            } else {
+                // 跳過非Compound類型的項目
+                readNBTValue(dis, listType);
+            }
+        }
+        
+        return list;
+    }
+    
+    /**
+     * 將背包NBT轉換為JSON
+     */
+    private String convertInventoryToJson(java.util.List<NBTCompound> inventoryList) {
+        StringBuilder json = new StringBuilder();
+        json.append("{\"size\":41,\"minecraft_version\":\"").append(getCurrentVersion())
+            .append("\",\"data_version\":").append(getCurrentDataVersion())
+            .append(",\"items\":{");
+        
+        boolean first = true;
+        for (NBTCompound item : inventoryList) {
+            if (item.containsKey("Slot") && item.containsKey("id")) {
+                if (!first) json.append(",");
+                first = false;
+                
+                int slot = item.getInt("Slot");
+                String itemId = item.getString("id");
+                int count = item.containsKey("count") ? item.getInt("count") : 1;
+                
+                json.append("\"").append(slot).append("\":")
+                    .append("\"{\\\"id\\\":\\\"").append(itemId).append("\\\",\\\"count\\\":").append(count).append("}\"");
+            }
+        }
+        
+        json.append("}}");
+        return json.toString();
     }
     
 }

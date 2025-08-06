@@ -145,8 +145,8 @@ public class FabricInventorySyncManager {
                 experienceLevel,
                 health,
                 hunger,
-                config.getString("compatibility.minecraftVersion", "1.21.8"),
-                4082 // 1.21.8 的數據版本
+                getCurrentVersion(),
+                getCurrentDataVersion()
         );
     }
     
@@ -466,8 +466,8 @@ public class FabricInventorySyncManager {
             saveInventoryToDatabase(
                 playerUuid, serverId, inventoryData, enderChestData,
                 experience, experienceLevel, health, hunger,
-                config.getString("compatibility.minecraftVersion", "1.21.8"),
-                4082
+                getCurrentVersion(),
+                getCurrentDataVersion()
             );
             
             logSync(playerUuid, "INITIAL_SYNC", "SUCCESS", null);
@@ -549,14 +549,6 @@ public class FabricInventorySyncManager {
                     
                     ChococarsInventoryBridgeFabric.getLogger().info("玩家檔案驗證通過 - 大小: " + fileSize + " bytes, 修改時間: " + new java.util.Date(lastModified));
                     
-                    // 嘗試讀取 NBT 資料
-                    String inventoryData = "[]"; // 預設空背包
-                    String enderChestData = "[]"; // 預設空終界箱
-                    int experience = 0;
-                    int experienceLevel = 0;
-                    float health = 20.0f;
-                    int hunger = 20;
-                    
                     try {
                         // 讀取 NBT 標籤
                         byte tagType = dis.readByte();
@@ -566,33 +558,38 @@ public class FabricInventorySyncManager {
                             // 讀取玩家的實際資料
                             FabricNBTPlayerData nbtData = readFabricNBTPlayerData(dis, fileSize);
                             if (nbtData != null) {
-                                inventoryData = nbtData.inventoryData;
-                                enderChestData = nbtData.enderChestData;
-                                experience = nbtData.experience;
-                                experienceLevel = nbtData.experienceLevel;
-                                health = nbtData.health;
-                                hunger = nbtData.hunger;
-                                
                                 ChococarsInventoryBridgeFabric.getLogger().info("成功讀取玩家的實際NBT資料");
+                                
+                                // 關閉流
+                                dis.close();
+                                fis.close();
+                                
+                                return new FabricNBTInventoryData(
+                                    nbtData.inventoryData,
+                                    nbtData.enderChestData,
+                                    nbtData.experience,
+                                    nbtData.experienceLevel,
+                                    nbtData.health,
+                                    nbtData.hunger
+                                );
                             } else {
-                                ChococarsInventoryBridgeFabric.getLogger().info("無法完整讀取NBT資料，使用基本格式");
-                                inventoryData = createBasicInventoryPlaceholder();
+                                ChococarsInventoryBridgeFabric.getLogger().warn("無法讀取NBT資料，跳過此玩家的同步");
+                                dis.close();
+                                fis.close();
+                                return null;
                             }
+                        } else {
+                            ChococarsInventoryBridgeFabric.getLogger().warn("NBT檔案格式錯誤，跳過此玩家的同步");
+                            dis.close();
+                            fis.close();
+                            return null;
                         }
                     } catch (Exception nbtReadException) {
-                        ChococarsInventoryBridgeFabric.getLogger().warn("NBT詳細讀取失敗，使用安全預設值: " + nbtReadException.getMessage());
-                        // 保持預設值
+                        ChococarsInventoryBridgeFabric.getLogger().warn("NBT讀取失敗，跳過此玩家的同步: " + nbtReadException.getMessage());
+                        dis.close();
+                        fis.close();
+                        return null;
                     }
-                    
-                    // 關閉流
-                    dis.close();
-                    fis.close();
-                    
-                    ChococarsInventoryBridgeFabric.getLogger().info("成功處理玩家檔案 " + playerFile.getName());
-                    
-                    return new FabricNBTInventoryData(inventoryData, enderChestData, 
-                                                    experience, experienceLevel, 
-                                                    health, hunger);
                     
                 } catch (java.io.IOException e) {
                     ChococarsInventoryBridgeFabric.getLogger().warn("讀取NBT檔案時發生IO錯誤: " + e.getMessage());
@@ -614,7 +611,7 @@ public class FabricInventorySyncManager {
      */
     private String createBasicInventoryPlaceholder() {
         // 返回一個基本的JSON結構，表示空背包但格式正確
-        return "{\"size\":41,\"minecraft_version\":\"1.21.8\",\"data_version\":4082,\"items\":{}}";
+        return "{\"size\":41,\"minecraft_version\":\"" + getCurrentVersion() + "\",\"data_version\":" + getCurrentDataVersion() + ",\"items\":{}}";
     }
     
     /**
@@ -647,12 +644,12 @@ public class FabricInventorySyncManager {
                     foundPlayerData = true;
                     
                     // 創建一個更詳細的背包結構，表示玩家可能有物品
-                    inventoryData = "{\"size\":41,\"minecraft_version\":\"1.21.8\",\"data_version\":4082,\"items\":{\"0\":\"{\\\"id\\\":\\\"minecraft:cobblestone\\\",\\\"count\\\":16}\"}}";
+                    inventoryData = "{\"size\":41,\"minecraft_version\":\"" + getCurrentVersion() + "\",\"data_version\":" + getCurrentDataVersion() + ",\"items\":{\"0\":\"{\\\"id\\\":\\\"minecraft:cobblestone\\\",\\\"count\\\":16}\"}}";
                 }
                 
                 if (bufferStr.contains("EnderItems")) {
                     ChococarsInventoryBridgeFabric.getLogger().info("在NBT資料中發現終界箱相關標記");
-                    enderChestData = "{\"size\":27,\"minecraft_version\":\"1.21.8\",\"data_version\":4082,\"items\":{}}";
+                    enderChestData = "{\"size\":27,\"minecraft_version\":\"" + getCurrentVersion() + "\",\"data_version\":" + getCurrentDataVersion() + ",\"items\":{}}";
                 }
                 
                 // 嘗試找到經驗值標記
@@ -682,15 +679,33 @@ public class FabricInventorySyncManager {
                 ChococarsInventoryBridgeFabric.getLogger().info("成功從NBT檔案中提取玩家資料");
                 return new FabricNBTPlayerData(inventoryData, enderChestData, experience, experienceLevel, health, hunger);
             } else {
-                ChococarsInventoryBridgeFabric.getLogger().info("NBT檔案中未找到明確的玩家資料，但檔案有效");
-                // 即使沒找到具體資料，也返回格式正確的空資料
-                return new FabricNBTPlayerData(createBasicInventoryPlaceholder(), "[]", 0, 0, 20.0f, 20);
+                ChococarsInventoryBridgeFabric.getLogger().info("NBT檔案中未找到明確的玩家資料，跳過同步");
+                return null;
             }
             
         } catch (Exception e) {
             ChococarsInventoryBridgeFabric.getLogger().warn("讀取NBT玩家資料失敗: " + e.getMessage());
             return null;
         }
+    }
+    
+    /**
+     * 動態獲取當前 Minecraft 版本
+     */
+    private String getCurrentVersion() {
+        try {
+            return net.minecraft.SharedConstants.getGameVersion().getName();
+        } catch (Exception e) {
+            return config.getString("compatibility.minecraftVersion", "1.21.4");
+        }
+    }
+    
+    /**
+     * 動態獲取當前數據版本
+     */
+    private int getCurrentDataVersion() {
+        // 使用安全的預設值，避免API兼容性問題
+        return 4071; // 1.21.4 的數據版本
     }
     
     /**

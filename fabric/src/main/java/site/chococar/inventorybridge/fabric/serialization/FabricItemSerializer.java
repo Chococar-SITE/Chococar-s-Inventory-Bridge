@@ -19,8 +19,21 @@ import java.util.List;
 
 public class FabricItemSerializer {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final String CURRENT_VERSION = "1.21.8";
-    private static final int CURRENT_DATA_VERSION = 4082;
+    // 動態獲取版本信息
+    private static String getCurrentVersion() {
+        try {
+            // 從 Minecraft 獲取當前版本
+            return net.minecraft.SharedConstants.getGameVersion().getName();
+        } catch (Exception e) {
+            // 如果無法獲取，從配置文件獲取
+            return "1.21.4"; // 使用預設值
+        }
+    }
+    
+    private static int getCurrentDataVersion() {
+        // 使用安全的預設值，避免API兼容性問題
+        return 4071; // 1.21.4 的數據版本
+    }
     
     public static String serializeItemStack(ItemStack itemStack) {
         if (itemStack.isEmpty()) {
@@ -30,8 +43,8 @@ public class FabricItemSerializer {
         JsonObject json = new JsonObject();
         json.addProperty("id", Registries.ITEM.getId(itemStack.getItem()).toString());
         json.addProperty("count", itemStack.getCount());
-        json.addProperty("minecraft_version", CURRENT_VERSION);
-        json.addProperty("data_version", CURRENT_DATA_VERSION);
+        json.addProperty("minecraft_version", getCurrentVersion());
+        json.addProperty("data_version", getCurrentDataVersion());
         
         // 序列化組件
         JsonObject componentsJson = new JsonObject();
@@ -114,7 +127,7 @@ public class FabricItemSerializer {
             String version = json.has("minecraft_version") ? json.get("minecraft_version").getAsString() : "unknown";
             
             // 檢查物品兼容性
-            if (!ItemMappings.isItemAvailableInVersion(itemId, CURRENT_VERSION)) {
+            if (!ItemMappings.isItemAvailableInVersion(itemId, getCurrentVersion())) {
                 String compatibleId = ItemMappings.getCompatibleItem(itemId);
                 if (!compatibleId.equals(itemId)) {
                     ChococarsInventoryBridgeFabric.getLogger().info(String.format("將物品 %s 轉換為 %s 以保持版本兼容", itemId, compatibleId));
@@ -198,8 +211,8 @@ public class FabricItemSerializer {
     public static String serializeInventory(Inventory inventory) {
         JsonObject json = new JsonObject();
         json.addProperty("size", inventory.size());
-        json.addProperty("minecraft_version", CURRENT_VERSION);
-        json.addProperty("data_version", CURRENT_DATA_VERSION);
+        json.addProperty("minecraft_version", getCurrentVersion());
+        json.addProperty("data_version", getCurrentDataVersion());
         
         JsonObject itemsJson = new JsonObject();
         for (int i = 0; i < inventory.size(); i++) {
@@ -254,8 +267,8 @@ public class FabricItemSerializer {
         
         JsonObject json = new JsonObject();
         json.addProperty("size", 41); // 預設玩家背包大小
-        json.addProperty("minecraft_version", CURRENT_VERSION);
-        json.addProperty("data_version", CURRENT_DATA_VERSION);
+        json.addProperty("minecraft_version", getCurrentVersion());
+        json.addProperty("data_version", getCurrentDataVersion());
         json.add("items", new JsonObject()); // 空的物品清單
         
         return GSON.toJson(json);

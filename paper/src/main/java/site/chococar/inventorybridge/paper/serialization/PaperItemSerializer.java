@@ -18,8 +18,42 @@ import java.util.logging.Logger;
 
 public class PaperItemSerializer {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final String CURRENT_VERSION = "1.21.8";
-    private static final int CURRENT_DATA_VERSION = 4082;
+    // 動態獲取版本信息
+    private static String getCurrentVersion() {
+        try {
+            return org.bukkit.Bukkit.getMinecraftVersion();
+        } catch (Exception e) {
+            logger.warning("無法獲取 Minecraft 版本，使用預設值: " + e.getMessage());
+            return "1.21.4";
+        }
+    }
+    
+    private static int getCurrentDataVersion() {
+        try {
+            String version = getCurrentVersion();
+            
+            // 根據版本號推斷數據版本
+            if (version.startsWith("1.21.4")) {
+                return 4071;
+            } else if (version.startsWith("1.21.5")) {
+                return 4073;
+            } else if (version.startsWith("1.21.6")) {
+                return 4076;
+            } else if (version.startsWith("1.21.7")) {
+                return 4079;
+            } else if (version.startsWith("1.21.8")) {
+                return 4082;
+            } else if (version.startsWith("1.21")) {
+                return 4071; // 預設為 1.21.4 的數據版本
+            } else {
+                logger.warning("未知的 Minecraft 版本: " + version + "，使用預設數據版本");
+                return 4071;
+            }
+        } catch (Exception e) {
+            logger.warning("無法獲取數據版本，使用預設值: " + e.getMessage());
+            return 4071;
+        }
+    }
     private static final Logger logger = Logger.getLogger("ChococarsInventoryBridge");
     
     public static String serializeItemStack(ItemStack itemStack) {
@@ -30,8 +64,8 @@ public class PaperItemSerializer {
         JsonObject json = new JsonObject();
         json.addProperty("material", itemStack.getType().name());
         json.addProperty("amount", itemStack.getAmount());
-        json.addProperty("minecraft_version", CURRENT_VERSION);
-        json.addProperty("data_version", CURRENT_DATA_VERSION);
+        json.addProperty("minecraft_version", getCurrentVersion());
+        json.addProperty("data_version", getCurrentDataVersion());
         
         // Handle item meta
         if (itemStack.hasItemMeta()) {
@@ -45,12 +79,16 @@ public class PaperItemSerializer {
             
             // Display name
             if (meta.hasDisplayName()) {
-                metaJson.addProperty("display_name", meta.getDisplayName());
+                metaJson.addProperty("display_name", meta.displayName().toString());
             }
             
             // Lore
             if (meta.hasLore()) {
-                metaJson.add("lore", GSON.toJsonTree(meta.getLore()));
+                List<String> loreStrings = new ArrayList<>();
+                for (net.kyori.adventure.text.Component component : meta.lore()) {
+                    loreStrings.add(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(component));
+                }
+                metaJson.add("lore", GSON.toJsonTree(loreStrings));
             }
             
             // Enchantments
@@ -129,23 +167,35 @@ public class PaperItemSerializer {
                     
                     // Display name
                     if (metaJson.has("display_name")) {
-                        meta.setDisplayName(metaJson.get("display_name").getAsString());
+                        meta.displayName(net.kyori.adventure.text.Component.text(metaJson.get("display_name").getAsString()));
                     }
                     
                     // Lore
                     if (metaJson.has("lore")) {
-                        List<String> lore = GSON.fromJson(metaJson.get("lore"), List.class);
-                        meta.setLore(lore);
+                        List<String> loreStrings = GSON.fromJson(metaJson.get("lore"), 
+                            new com.google.gson.reflect.TypeToken<List<String>>(){}.getType());
+                        List<net.kyori.adventure.text.Component> loreComponents = new ArrayList<>();
+                        for (String loreString : loreStrings) {
+                            loreComponents.add(net.kyori.adventure.text.Component.text(loreString));
+                        }
+                        meta.lore(loreComponents);
                     }
                     
                     // Enchantments
                     if (metaJson.has("enchantments")) {
                         JsonObject enchantmentsJson = metaJson.getAsJsonObject("enchantments");
                         for (String enchantKey : enchantmentsJson.keySet()) {
-                            Enchantment enchantment = Enchantment.getByKey(org.bukkit.NamespacedKey.fromString(enchantKey));
-                            if (enchantment != null) {
-                                int level = enchantmentsJson.get(enchantKey).getAsInt();
-                                meta.addEnchant(enchantment, level, true);
+                            try {
+                                org.bukkit.NamespacedKey key = org.bukkit.NamespacedKey.fromString(enchantKey);
+                                io.papermc.paper.registry.RegistryAccess registryAccess = io.papermc.paper.registry.RegistryAccess.registryAccess();
+                                org.bukkit.Registry<Enchantment> enchantmentRegistry = registryAccess.getRegistry(io.papermc.paper.registry.RegistryKey.ENCHANTMENT);
+                                Enchantment enchantment = enchantmentRegistry.get(key);
+                                if (enchantment != null) {
+                                    int level = enchantmentsJson.get(enchantKey).getAsInt();
+                                    meta.addEnchant(enchantment, level, true);
+                                }
+                            } catch (Exception e) {
+                                logger.warning("無法載入附魔: " + enchantKey + " - " + e.getMessage());
                             }
                         }
                     }
@@ -157,7 +207,8 @@ public class PaperItemSerializer {
                     
                     // Bundle items
                     if (metaJson.has("bundle_items") && meta instanceof BundleMeta bundleMeta) {
-                        List<String> bundleItemStrings = GSON.fromJson(metaJson.get("bundle_items"), List.class);
+                        List<String> bundleItemStrings = GSON.fromJson(metaJson.get("bundle_items"), 
+                            new com.google.gson.reflect.TypeToken<List<String>>(){}.getType());
                         List<ItemStack> bundleItems = new ArrayList<>();
                         for (String itemString : bundleItemStrings) {
                             ItemStack bundleItem = deserializeItemStack(itemString);
@@ -208,8 +259,8 @@ public class PaperItemSerializer {
     public static String serializeInventory(Inventory inventory) {
         JsonObject json = new JsonObject();
         json.addProperty("size", inventory.getSize());
-        json.addProperty("minecraft_version", CURRENT_VERSION);
-        json.addProperty("data_version", CURRENT_DATA_VERSION);
+        json.addProperty("minecraft_version", getCurrentVersion());
+        json.addProperty("data_version", getCurrentDataVersion());
         
         JsonObject itemsJson = new JsonObject();
         ItemStack[] contents = inventory.getContents();
@@ -273,8 +324,8 @@ public class PaperItemSerializer {
         
         JsonObject json = new JsonObject();
         json.addProperty("size", items.length);
-        json.addProperty("minecraft_version", CURRENT_VERSION);
-        json.addProperty("data_version", CURRENT_DATA_VERSION);
+        json.addProperty("minecraft_version", getCurrentVersion());
+        json.addProperty("data_version", getCurrentDataVersion());
         
         JsonObject itemsJson = new JsonObject();
         
