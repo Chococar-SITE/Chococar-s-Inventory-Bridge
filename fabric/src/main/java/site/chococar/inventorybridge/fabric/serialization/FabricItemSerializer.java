@@ -23,7 +23,7 @@ public class FabricItemSerializer {
     private static String getCurrentVersion() {
         try {
             // 從 Minecraft 獲取當前版本
-            return net.minecraft.SharedConstants.getGameVersion().getName();
+            return net.minecraft.SharedConstants.getGameVersion().getId();
         } catch (Exception e) {
             // 如果無法獲取，從配置文件獲取
             return "1.21.4"; // 使用預設值

@@ -606,13 +606,6 @@ public class FabricInventorySyncManager {
         }
     }
     
-    /**
-     * 創建基本的背包佔位資料，避免完全空白
-     */
-    private String createBasicInventoryPlaceholder() {
-        // 返回一個基本的JSON結構，表示空背包但格式正確
-        return "{\"size\":41,\"minecraft_version\":\"" + getCurrentVersion() + "\",\"data_version\":" + getCurrentDataVersion() + ",\"items\":{}}";
-    }
     
     /**
      * 從NBT資料流讀取玩家資料 (Fabric實現)
@@ -694,7 +687,7 @@ public class FabricInventorySyncManager {
      */
     private String getCurrentVersion() {
         try {
-            return net.minecraft.SharedConstants.getGameVersion().getName();
+            return net.minecraft.SharedConstants.getGameVersion().getId();
         } catch (Exception e) {
             return config.getString("compatibility.minecraftVersion", "1.21.4");
         }
