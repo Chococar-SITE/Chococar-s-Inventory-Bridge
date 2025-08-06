@@ -21,13 +21,8 @@ public class FabricItemSerializer {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     // 動態獲取版本信息
     private static String getCurrentVersion() {
-        try {
-            // 從 Minecraft 獲取當前版本
-            return net.minecraft.SharedConstants.getGameVersion().getId();
-        } catch (Exception e) {
-            // 如果無法獲取，從配置文件獲取
-            return "1.21.4"; // 使用預設值
-        }
+        // 使用預設值避免API兼容性問題
+        return "1.21.4";
     }
     
     private static int getCurrentDataVersion() {

@@ -686,11 +686,7 @@ public class FabricInventorySyncManager {
      * 動態獲取當前 Minecraft 版本
      */
     private String getCurrentVersion() {
-        try {
-            return net.minecraft.SharedConstants.getGameVersion().getId();
-        } catch (Exception e) {
-            return config.getString("compatibility.minecraftVersion", "1.21.4");
-        }
+        return config.getString("compatibility.minecraftVersion", "1.21.4");
     }
     
     /**
