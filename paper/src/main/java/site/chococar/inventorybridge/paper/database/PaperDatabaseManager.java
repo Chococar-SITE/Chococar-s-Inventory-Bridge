@@ -1,7 +1,8 @@
 package site.chococar.inventorybridge.paper.database;
 
-import site.chococar.inventorybridge.common.config.ConfigurationManager;
+import site.chococar.inventorybridge.common.database.CommonDatabaseManager;
 import site.chococar.inventorybridge.common.database.DatabaseConnection;
+import site.chococar.inventorybridge.common.database.InventoryDataRecord;
 import site.chococar.inventorybridge.paper.config.PaperConfigManager;
 
 import java.sql.Connection;
@@ -11,7 +12,7 @@ import java.sql.SQLException;
 import java.util.UUID;
 import java.util.logging.Logger;
 
-public class PaperDatabaseManager {
+public class PaperDatabaseManager implements CommonDatabaseManager {
     private final DatabaseConnection databaseConnection;
     private final Logger logger;
     
@@ -21,6 +22,7 @@ public class PaperDatabaseManager {
         this.databaseConnection = new DatabaseConnection(configManager.getConfigurationManager());
     }
     
+    @Override
     public void initialize() {
         databaseConnection.initialize();
         logger.info("Paper database initialized through Common module");
@@ -34,14 +36,17 @@ public class PaperDatabaseManager {
         return databaseConnection.getTablePrefix();
     }
     
+    @Override
     public boolean isStandbyMode() {
         return databaseConnection.isStandbyMode();
     }
     
+    @Override
     public String getLastConnectionError() {
         return databaseConnection.getLastConnectionError();
     }
     
+    @Override
     public boolean reconnect() {
         boolean success = databaseConnection.reconnect();
         if (success) {
@@ -52,12 +57,14 @@ public class PaperDatabaseManager {
         return success;
     }
     
+    @Override
     public void close() {
         databaseConnection.close();
         logger.info("Paper database connection closed");
     }
     
     // Paper特有的便利方法
+    @Override
     public void saveInventory(UUID playerUuid, String serverId, String inventoryData, 
                             String enderChestData, int experience, int experienceLevel, 
                             double health, int hunger, String minecraftVersion, int dataVersion) {
@@ -96,8 +103,10 @@ public class PaperDatabaseManager {
         }
     }
     
-    public PaperInventoryData loadInventory(UUID playerUuid, String serverId) {
-        String sql = String.format("""
+    @Override
+    public InventoryDataRecord loadInventory(UUID playerUuid, String serverId) {
+        // 首先嘗試從當前伺服器載入
+        String currentServerSql = String.format("""
             SELECT `inventory_data`, `ender_chest_data`, `experience`, `experience_level`, 
                    `health`, `hunger`, `minecraft_version`, `data_version`, `last_updated`
             FROM `%sinventories`
@@ -105,13 +114,14 @@ public class PaperDatabaseManager {
             """, getTablePrefix());
         
         try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(currentServerSql)) {
             stmt.setString(1, playerUuid.toString());
             stmt.setString(2, serverId);
             
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
-                    return new PaperInventoryData(
+                    logger.info("從當前伺服器 " + serverId + " 載入玩家 " + playerUuid + " 的資料");
+                    return new InventoryDataRecord(
                         rs.getString("inventory_data"),
                         rs.getString("ender_chest_data"),
                         rs.getInt("experience"),
@@ -125,12 +135,48 @@ public class PaperDatabaseManager {
                 }
             }
         } catch (SQLException e) {
-            logger.severe("載入背包資料失敗: " + e.getMessage());
+            logger.severe("從當前伺服器載入背包資料失敗: " + e.getMessage());
+        }
+        
+        // 如果當前伺服器沒有資料，嘗試從其他伺服器載入最新資料
+        String crossServerSql = String.format("""
+            SELECT `inventory_data`, `ender_chest_data`, `experience`, `experience_level`, 
+                   `health`, `hunger`, `minecraft_version`, `data_version`, `last_updated`, `server_id`
+            FROM `%sinventories`
+            WHERE `player_uuid` = ?
+            ORDER BY `last_updated` DESC
+            LIMIT 1
+            """, getTablePrefix());
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(crossServerSql)) {
+            stmt.setString(1, playerUuid.toString());
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String sourceServerId = rs.getString("server_id");
+                    logger.info("從其他伺服器 " + sourceServerId + " 載入玩家 " + playerUuid + " 的資料至 " + serverId);
+                    return new InventoryDataRecord(
+                        rs.getString("inventory_data"),
+                        rs.getString("ender_chest_data"),
+                        rs.getInt("experience"),
+                        rs.getInt("experience_level"),
+                        rs.getDouble("health"),
+                        rs.getInt("hunger"),
+                        rs.getString("minecraft_version"),
+                        rs.getInt("data_version"),
+                        rs.getTimestamp("last_updated")
+                    );
+                }
+            }
+        } catch (SQLException e) {
+            logger.severe("從其他伺服器載入背包資料失敗: " + e.getMessage());
         }
         
         return null;
     }
     
+    @Override
     public boolean hasInventory(UUID playerUuid, String serverId) {
         String sql = String.format("""
             SELECT 1 FROM `%sinventories` 
@@ -152,6 +198,7 @@ public class PaperDatabaseManager {
         }
     }
     
+    @Override
     public void logSync(UUID playerUuid, String serverId, String syncType, String status, String errorMessage) {
         String sql = String.format("""
             INSERT INTO `%ssync_log` (`player_uuid`, `server_id`, `sync_type`, `status`, `error_message`)

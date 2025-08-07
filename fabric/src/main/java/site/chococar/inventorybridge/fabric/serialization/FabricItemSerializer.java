@@ -7,11 +7,14 @@ import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.BundleContentsComponent;
+import net.minecraft.component.type.ContainerComponent;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.collection.DefaultedList;
 import site.chococar.inventorybridge.common.compatibility.ItemMappings;
+import site.chococar.inventorybridge.common.serialization.CommonItemSerializer;
 import site.chococar.inventorybridge.fabric.ChococarsInventoryBridgeFabric;
 
 import java.util.ArrayList;
@@ -38,8 +41,6 @@ public class FabricItemSerializer {
         JsonObject json = new JsonObject();
         json.addProperty("id", Registries.ITEM.getId(itemStack.getItem()).toString());
         json.addProperty("count", itemStack.getCount());
-        json.addProperty("minecraft_version", getCurrentVersion());
-        json.addProperty("data_version", getCurrentDataVersion());
         
         // 序列化組件
         JsonObject componentsJson = new JsonObject();
@@ -55,15 +56,38 @@ public class FabricItemSerializer {
         if (itemStack.contains(DataComponentTypes.BUNDLE_CONTENTS)) {
             BundleContentsComponent bundleContents = itemStack.get(DataComponentTypes.BUNDLE_CONTENTS);
             JsonObject bundleJson = new JsonObject();
-            List<String> items = new ArrayList<>();
+            List<JsonObject> items = new ArrayList<>();
             bundleContents.iterate().forEach(stack -> {
                 String serialized = serializeItemStack(stack);
                 if (serialized != null) {
-                    items.add(serialized);
+                    JsonObject itemObj = JsonParser.parseString(serialized).getAsJsonObject();
+                    items.add(itemObj);
                 }
             });
             bundleJson.add("items", GSON.toJsonTree(items));
             componentsJson.add("bundle_contents", bundleJson);
+        }
+        
+        // 處理容器內容（界伏盒等）
+        if (itemStack.contains(DataComponentTypes.CONTAINER)) {
+            ContainerComponent container = itemStack.get(DataComponentTypes.CONTAINER);
+            JsonObject containerJson = new JsonObject();
+            JsonObject containerItems = new JsonObject();
+            
+            for (int i = 0; i < container.stream().toList().size(); i++) {
+                ItemStack stack = container.stream().toList().get(i);
+                if (!stack.isEmpty()) {
+                    String serialized = serializeItemStack(stack);
+                    if (serialized != null) {
+                        JsonObject itemObj = JsonParser.parseString(serialized).getAsJsonObject();
+                        containerItems.add(String.valueOf(i), itemObj);
+                    }
+                }
+            }
+            
+            containerJson.add("items", containerItems);
+            containerJson.addProperty("size", container.stream().toList().size());
+            componentsJson.add("container", containerJson);
         }
         
         // 處理耐久度
@@ -193,6 +217,42 @@ public class FabricItemSerializer {
                         // itemStack.set(DataComponentTypes.BUNDLE_CONTENTS, builder.build());
                     }
                 }
+                
+                // 處理容器內容（界伏盒等）
+                if (componentsJson.has("container")) {
+                    JsonObject containerJson = componentsJson.getAsJsonObject("container");
+                    if (containerJson.has("items")) {
+                        try {
+                            JsonObject containerItems = containerJson.getAsJsonObject("items");
+                            int containerSize = containerJson.has("size") ? containerJson.get("size").getAsInt() : 27;
+                            
+                            // 初始化DefaultedList
+                            DefaultedList<ItemStack> stacks = DefaultedList.ofSize(containerSize, ItemStack.EMPTY);
+                            
+                            // 設置物品
+                            containerItems.entrySet().forEach(entry -> {
+                                try {
+                                    int slot = Integer.parseInt(entry.getKey());
+                                    if (slot < containerSize) {
+                                        String itemJsonString = GSON.toJson(entry.getValue());
+                                        ItemStack stack = deserializeItemStack(itemJsonString);
+                                        if (slot < stacks.size()) {
+                                            stacks.set(slot, stack);
+                                        }
+                                    }
+                                } catch (NumberFormatException e) {
+                                    ChococarsInventoryBridgeFabric.getLogger().warn("無效的容器槽位: " + entry.getKey());
+                                }
+                            });
+                            
+                            // 創建容器組件
+                            itemStack.set(DataComponentTypes.CONTAINER, ContainerComponent.fromStacks(stacks));
+                            
+                        } catch (Exception e) {
+                            ChococarsInventoryBridgeFabric.getLogger().warn("反序列化容器內容失敗: " + e.getMessage());
+                        }
+                    }
+                }
             }
             
             return itemStack;
@@ -204,52 +264,25 @@ public class FabricItemSerializer {
     }
     
     public static String serializeInventory(Inventory inventory) {
-        JsonObject json = new JsonObject();
-        json.addProperty("size", inventory.size());
-        json.addProperty("minecraft_version", getCurrentVersion());
-        json.addProperty("data_version", getCurrentDataVersion());
-        
-        JsonObject itemsJson = new JsonObject();
+        // 創建適配器陣列
+        CommonItemSerializer.ItemStackProvider[] items = new CommonItemSerializer.ItemStackProvider[inventory.size()];
         for (int i = 0; i < inventory.size(); i++) {
             ItemStack stack = inventory.getStack(i);
             if (!stack.isEmpty()) {
-                String serializedItem = serializeItemStack(stack);
-                if (serializedItem != null) {
-                    itemsJson.addProperty(String.valueOf(i), serializedItem);
-                }
+                items[i] = new FabricItemStackProvider(stack);
             }
         }
-        json.add("items", itemsJson);
         
-        return GSON.toJson(json);
+        return CommonItemSerializer.serializeInventory(
+            inventory.size(), 
+            getCurrentVersion(), 
+            getCurrentDataVersion(), 
+            items
+        );
     }
     
     public static void deserializeInventory(String data, Inventory inventory) {
-        if (data == null || data.isEmpty()) {
-            return;
-        }
-        
-        try {
-            JsonObject json = JsonParser.parseString(data).getAsJsonObject();
-            
-            if (json.has("items")) {
-                JsonObject itemsJson = json.getAsJsonObject("items");
-                itemsJson.entrySet().forEach(entry -> {
-                    try {
-                        int slot = Integer.parseInt(entry.getKey());
-                        if (slot < inventory.size()) {
-                            ItemStack stack = deserializeItemStack(entry.getValue().getAsString());
-                            inventory.setStack(slot, stack);
-                        }
-                    } catch (NumberFormatException e) {
-                        ChococarsInventoryBridgeFabric.getLogger().warn(String.format("無效的槽位號碼: %s", entry.getKey()));
-                    }
-                });
-            }
-            
-        } catch (Exception e) {
-            ChococarsInventoryBridgeFabric.getLogger().error("反序列化背包失敗", e);
-        }
+        CommonItemSerializer.deserializeInventory(data, new FabricInventoryProvider(inventory));
     }
     
     /**
@@ -267,5 +300,52 @@ public class FabricItemSerializer {
         json.add("items", new JsonObject()); // 空的物品清單
         
         return GSON.toJson(json);
+    }
+    
+    /**
+     * Fabric ItemStack 提供者實現
+     */
+    private static class FabricItemStackProvider implements CommonItemSerializer.ItemStackProvider {
+        private final ItemStack itemStack;
+        
+        public FabricItemStackProvider(ItemStack itemStack) {
+            this.itemStack = itemStack;
+        }
+        
+        @Override
+        public boolean isEmpty() {
+            return itemStack.isEmpty();
+        }
+        
+        @Override
+        public String serialize() {
+            return serializeItemStack(itemStack);
+        }
+    }
+    
+    /**
+     * Fabric 背包提供者實現
+     */
+    private static class FabricInventoryProvider implements CommonItemSerializer.InventoryProvider {
+        private final Inventory inventory;
+        
+        public FabricInventoryProvider(Inventory inventory) {
+            this.inventory = inventory;
+        }
+        
+        @Override
+        public int size() {
+            return inventory.size();
+        }
+        
+        @Override
+        public void setItem(int slot, String itemData) {
+            try {
+                ItemStack stack = deserializeItemStack(itemData);
+                inventory.setStack(slot, stack);
+            } catch (Exception e) {
+                ChococarsInventoryBridgeFabric.getLogger().warn(String.format("無效的槽位號碼: %d", slot));
+            }
+        }
     }
 }

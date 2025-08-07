@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import site.chococar.inventorybridge.common.serialization.CommonItemSerializer;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.Inventory;
@@ -114,6 +115,29 @@ public class PaperItemSerializer {
                 }
             }
             
+            // Handle shulker box and other container contents
+            if (meta instanceof org.bukkit.inventory.meta.BlockStateMeta blockStateMeta) {
+                if (blockStateMeta.getBlockState() instanceof org.bukkit.block.ShulkerBox shulkerBox) {
+                    Inventory shulkerInventory = shulkerBox.getInventory();
+                    JsonObject containerJson = new JsonObject();
+                    containerJson.addProperty("size", shulkerInventory.getSize());
+                    
+                    JsonObject containerItems = new JsonObject();
+                    ItemStack[] contents = shulkerInventory.getContents();
+                    for (int i = 0; i < contents.length; i++) {
+                        if (contents[i] != null && contents[i].getType() != Material.AIR) {
+                            String serializedItem = serializeItemStack(contents[i]);
+                            if (serializedItem != null) {
+                                JsonObject itemObj = JsonParser.parseString(serializedItem).getAsJsonObject();
+                                containerItems.add(String.valueOf(i), itemObj);
+                            }
+                        }
+                    }
+                    containerJson.add("items", containerItems);
+                    metaJson.add("container", containerJson);
+                }
+            }
+            
             // Damage for damageable items
             if (meta instanceof org.bukkit.inventory.meta.Damageable damageable) {
                 if (damageable.hasDamage()) {
@@ -219,6 +243,47 @@ public class PaperItemSerializer {
                         bundleMeta.setItems(bundleItems);
                     }
                     
+                    // Container contents (shulker boxes, etc.)
+                    if (metaJson.has("container") && meta instanceof org.bukkit.inventory.meta.BlockStateMeta blockStateMeta) {
+                        try {
+                            JsonObject containerJson = metaJson.getAsJsonObject("container");
+                            if (containerJson.has("items") && blockStateMeta.getBlockState() instanceof org.bukkit.block.ShulkerBox shulkerBox) {
+                                JsonObject containerItems = containerJson.getAsJsonObject("items");
+                                Inventory shulkerInventory = shulkerBox.getInventory();
+                                
+                                // Clear existing contents
+                                shulkerInventory.clear();
+                                
+                                // Load items
+                                for (String slotStr : containerItems.keySet()) {
+                                    try {
+                                        int slot = Integer.parseInt(slotStr);
+                                        if (slot < shulkerInventory.getSize()) {
+                                            String itemData;
+                                            if (containerItems.get(slotStr).isJsonObject()) {
+                                                itemData = GSON.toJson(containerItems.get(slotStr));
+                                            } else {
+                                                itemData = containerItems.get(slotStr).getAsString();
+                                            }
+                                            ItemStack containerItem = deserializeItemStack(itemData);
+                                            if (containerItem != null) {
+                                                shulkerInventory.setItem(slot, containerItem);
+                                            }
+                                        }
+                                    } catch (NumberFormatException e) {
+                                        logger.warning("Invalid container slot: " + slotStr);
+                                    }
+                                }
+                                
+                                // Update the block state
+                                shulkerBox.update();
+                                blockStateMeta.setBlockState(shulkerBox);
+                            }
+                        } catch (Exception e) {
+                            logger.warning("Failed to deserialize container contents: " + e.getMessage());
+                        }
+                    }
+                    
                     itemStack.setItemMeta(meta);
                 }
             }
@@ -257,25 +322,21 @@ public class PaperItemSerializer {
     }
     
     public static String serializeInventory(Inventory inventory) {
-        JsonObject json = new JsonObject();
-        json.addProperty("size", inventory.getSize());
-        json.addProperty("minecraft_version", getCurrentVersion());
-        json.addProperty("data_version", getCurrentDataVersion());
-        
-        JsonObject itemsJson = new JsonObject();
+        // 創建適配器陣列
         ItemStack[] contents = inventory.getContents();
-        
+        CommonItemSerializer.ItemStackProvider[] items = new CommonItemSerializer.ItemStackProvider[contents.length];
         for (int i = 0; i < contents.length; i++) {
             if (contents[i] != null && contents[i].getType() != Material.AIR) {
-                String serializedItem = serializeItemStack(contents[i]);
-                if (serializedItem != null) {
-                    itemsJson.addProperty(String.valueOf(i), serializedItem);
-                }
+                items[i] = new PaperItemStackProvider(contents[i]);
             }
         }
         
-        json.add("items", itemsJson);
-        return GSON.toJson(json);
+        return CommonItemSerializer.serializeInventory(
+            inventory.getSize(), 
+            getCurrentVersion(), 
+            getCurrentDataVersion(), 
+            items
+        );
     }
     
     public static ItemStack[] deserializeInventory(String data) {
@@ -284,28 +345,13 @@ public class PaperItemSerializer {
         }
         
         try {
+            // 使用 Common 序列化器先獲取 size
             JsonObject json = JsonParser.parseString(data).getAsJsonObject();
-            int size = json.get("size").getAsInt();
+            int size = json.has("size") ? json.get("size").getAsInt() : 41; // 預設背包大小
             ItemStack[] items = new ItemStack[size];
             
-            if (json.has("items")) {
-                JsonObject itemsJson = json.getAsJsonObject("items");
-                for (String slotStr : itemsJson.keySet()) {
-                    try {
-                        int slot = Integer.parseInt(slotStr);
-                        if (slot < size) {
-                            String itemData = itemsJson.get(slotStr).getAsString();
-                            ItemStack item = deserializeItemStack(itemData);
-                            if (item != null) {
-                                items[slot] = item;
-                            }
-                        }
-                    } catch (NumberFormatException e) {
-                        logger.warning("Invalid slot number: " + slotStr);
-                    }
-                }
-            }
-            
+            // 完全交給 Common 序列化器處理
+            CommonItemSerializer.deserializeInventory(data, new PaperInventoryArrayProvider(items));
             return items;
             
         } catch (Exception e) {
@@ -322,23 +368,68 @@ public class PaperItemSerializer {
             return "[]";
         }
         
-        JsonObject json = new JsonObject();
-        json.addProperty("size", items.length);
-        json.addProperty("minecraft_version", getCurrentVersion());
-        json.addProperty("data_version", getCurrentDataVersion());
-        
-        JsonObject itemsJson = new JsonObject();
-        
+        // 使用 Common 序列化器來處理
+        CommonItemSerializer.ItemStackProvider[] providers = new CommonItemSerializer.ItemStackProvider[items.length];
         for (int i = 0; i < items.length; i++) {
             if (items[i] != null && items[i].getType() != Material.AIR) {
-                String serializedItem = serializeItemStack(items[i]);
-                if (serializedItem != null) {
-                    itemsJson.addProperty(String.valueOf(i), serializedItem);
-                }
+                providers[i] = new PaperItemStackProvider(items[i]);
             }
         }
         
-        json.add("items", itemsJson);
-        return GSON.toJson(json);
+        return CommonItemSerializer.serializeInventory(
+            items.length,
+            getCurrentVersion(),
+            getCurrentDataVersion(),
+            providers
+        );
+    }
+    
+    /**
+     * Paper ItemStack 提供者實現
+     */
+    private static class PaperItemStackProvider implements CommonItemSerializer.ItemStackProvider {
+        private final ItemStack itemStack;
+        
+        public PaperItemStackProvider(ItemStack itemStack) {
+            this.itemStack = itemStack;
+        }
+        
+        @Override
+        public boolean isEmpty() {
+            return itemStack == null || itemStack.getType() == Material.AIR;
+        }
+        
+        @Override
+        public String serialize() {
+            return serializeItemStack(itemStack);
+        }
+    }
+    
+    /**
+     * Paper 背包陣列提供者實現
+     */
+    private static class PaperInventoryArrayProvider implements CommonItemSerializer.InventoryProvider {
+        private final ItemStack[] items;
+        
+        public PaperInventoryArrayProvider(ItemStack[] items) {
+            this.items = items;
+        }
+        
+        @Override
+        public int size() {
+            return items.length;
+        }
+        
+        @Override
+        public void setItem(int slot, String itemData) {
+            try {
+                ItemStack item = deserializeItemStack(itemData);
+                if (item != null && slot < items.length) {
+                    items[slot] = item;
+                }
+            } catch (Exception e) {
+                logger.warning("Invalid slot number: " + slot);
+            }
+        }
     }
 }

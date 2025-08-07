@@ -34,7 +34,7 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         databaseManager = new FabricDatabaseManager(configManager);
         
         // 初始化同步管理器
-        syncManager = new FabricInventorySyncManager(databaseManager.getDatabaseConnection(), configManager.getConfigurationManager());
+        syncManager = new FabricInventorySyncManager(databaseManager, configManager.getConfigurationManager());
         
         // 註冊指令
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
@@ -119,7 +119,7 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
         
         if (success) {
             // 重新初始化同步管理器
-            syncManager = new FabricInventorySyncManager(databaseManager.getDatabaseConnection(), configManager.getConfigurationManager());
+            syncManager = new FabricInventorySyncManager(databaseManager, configManager.getConfigurationManager());
             
             // 重新連接成功後，掃描現有玩家檔案
             syncManager.scanAndSyncExistingPlayerFiles();
@@ -138,7 +138,7 @@ public class ChococarsInventoryBridgeFabric implements ModInitializer {
             LOGGER.info("配置文件重新載入成功");
             
             // 重新初始化同步管理器
-            syncManager = new FabricInventorySyncManager(databaseManager.getDatabaseConnection(), configManager.getConfigurationManager());
+            syncManager = new FabricInventorySyncManager(databaseManager, configManager.getConfigurationManager());
             
             if (!databaseManager.isStandbyMode()) {
                 LOGGER.info("✅ 配置重新載入完成");

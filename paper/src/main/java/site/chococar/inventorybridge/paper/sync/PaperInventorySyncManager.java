@@ -1,212 +1,113 @@
 package site.chococar.inventorybridge.paper.sync;
 
-import org.bukkit.attribute.Attribute;
-import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
+import site.chococar.inventorybridge.common.config.ConfigurationManager;
+import site.chococar.inventorybridge.common.sync.BaseInventorySyncManager;
+import site.chococar.inventorybridge.paper.adapter.PaperPlayerAdapter;
 import site.chococar.inventorybridge.paper.config.PaperConfigManager;
 import site.chococar.inventorybridge.paper.database.PaperDatabaseManager;
-import site.chococar.inventorybridge.paper.database.PaperInventoryData;
 import site.chococar.inventorybridge.paper.serialization.PaperItemSerializer;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
 import java.util.UUID;
-import java.util.logging.Logger;
+import java.util.concurrent.CompletableFuture;
 
-public class PaperInventorySyncManager {
-    private final PaperDatabaseManager databaseManager;
-    private final Logger logger;
-    private final Map<UUID, Long> lastSyncTimes = new ConcurrentHashMap<>();
-    private final Map<UUID, Boolean> syncInProgress = new ConcurrentHashMap<>();
+public class PaperInventorySyncManager extends BaseInventorySyncManager<PaperPlayerAdapter> {
+    private final java.util.logging.Logger logger;
     private volatile boolean hasScannedPlayerFiles = false;
     
-    public PaperInventorySyncManager(PaperDatabaseManager databaseManager) {
-        this.databaseManager = databaseManager;
-        this.logger = Logger.getLogger("ChococarsInventoryBridge");
+    public PaperInventorySyncManager(PaperDatabaseManager databaseManager, ConfigurationManager config) {
+        super(databaseManager, config);
+        this.logger = java.util.logging.Logger.getLogger("ChococarsInventoryBridge");
     }
     
     public void onPlayerJoin(Player player) {
-        PaperConfigManager config = getConfigManager();
-        if (!config.isSyncOnJoin()) {
-            return;
-        }
-        
-        UUID playerUuid = player.getUniqueId();
-        
-        if (syncInProgress.getOrDefault(playerUuid, false)) {
-            return;
-        }
-        
-        syncInProgress.put(playerUuid, true);
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                loadPlayerInventory(player);
-                databaseManager.logSync(playerUuid, config.getServerId(), "JOIN", "SUCCESS", null);
-                logger.info("已為玩家 " + player.getName() + " 自動載入背包");
-            } catch (Exception e) {
-                databaseManager.logSync(playerUuid, config.getServerId(), "JOIN", "FAILED", e.getMessage());
-                logger.severe("玩家 " + player.getName() + " 自動載入失敗: " + e.getMessage());
-            } finally {
-                syncInProgress.put(playerUuid, false);
-                lastSyncTimes.put(playerUuid, System.currentTimeMillis());
-            }
-        });
+        super.onPlayerJoin(new PaperPlayerAdapter(player));
     }
     
     public void onPlayerLeave(Player player) {
-        PaperConfigManager config = getConfigManager();
-        if (!config.isSyncOnLeave()) {
-            return;
-        }
-        
-        UUID playerUuid = player.getUniqueId();
-        
-        if (syncInProgress.getOrDefault(playerUuid, false)) {
-            return;
-        }
-        
-        syncInProgress.put(playerUuid, true);
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                savePlayerInventory(player);
-                databaseManager.logSync(playerUuid, config.getServerId(), "LEAVE", "SUCCESS", null);
-                logger.info("已為玩家 " + player.getName() + " 自動保存背包");
-            } catch (Exception e) {
-                databaseManager.logSync(playerUuid, config.getServerId(), "LEAVE", "FAILED", e.getMessage());
-                logger.severe("玩家 " + player.getName() + " 自動保存失敗: " + e.getMessage());
-            } finally {
-                syncInProgress.put(playerUuid, false);
-                lastSyncTimes.put(playerUuid, System.currentTimeMillis());
-            }
-        });
+        super.onPlayerLeave(new PaperPlayerAdapter(player));
     }
     
     public void manualSync(Player player, boolean save) {
-        UUID playerUuid = player.getUniqueId();
-        PaperConfigManager config = getConfigManager();
-        
-        if (syncInProgress.getOrDefault(playerUuid, false)) {
-            logger.warning("Sync already in progress for player " + player.getName());
-            return;
-        }
-        
-        syncInProgress.put(playerUuid, true);
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                if (save) {
-                    savePlayerInventory(player);
-                } else {
-                    loadPlayerInventory(player);
-                }
-                databaseManager.logSync(playerUuid, config.getServerId(), "MANUAL", "SUCCESS", null);
-                logger.info("玩家 " + player.getName() + " 手動" + (save ? "保存" : "載入") + "完成");
-            } catch (Exception e) {
-                databaseManager.logSync(playerUuid, config.getServerId(), "MANUAL", "FAILED", e.getMessage());
-                logger.severe("玩家 " + player.getName() + " 手動" + (save ? "保存" : "載入") + "失敗: " + e.getMessage());
-            } finally {
-                syncInProgress.put(playerUuid, false);
-                lastSyncTimes.put(playerUuid, System.currentTimeMillis());
-            }
-        });
+        super.manualSync(new PaperPlayerAdapter(player), save);
     }
     
-    private void savePlayerInventory(Player player) {
-        PaperConfigManager config = getConfigManager();
-        
-        // Serialize main inventory
-        String inventoryData = PaperItemSerializer.serializeInventory(player.getInventory());
-        
-        // Serialize ender chest if enabled
-        String enderChestData = null;
-        if (config.isSyncEnderChest()) {
-            enderChestData = PaperItemSerializer.serializeInventory(player.getEnderChest());
-        }
-        
-        // Get experience data
-        int experience = config.isSyncExperience() ? player.getTotalExperience() : 0;
-        int experienceLevel = config.isSyncExperience() ? player.getLevel() : 0;
-        
-        // Get health and hunger data
-        double health = config.isSyncHealth() ? player.getHealth() : 20.0;
-        int hunger = config.isSyncHunger() ? player.getFoodLevel() : 20;
-        
-        databaseManager.saveInventory(
-                player.getUniqueId(),
-                config.getServerId(),
-                inventoryData,
-                enderChestData,
-                experience,
-                experienceLevel,
-                health,
-                hunger,
-                config.getMinecraftVersion(),
-                getCurrentDataVersion() // 動態獲取當前數據版本
-        );
+    
+    
+    // 實現抽象方法
+    @Override
+    protected String getServerId() {
+        return getConfigManager().getServerId();
     }
     
-    private void loadPlayerInventory(Player player) {
-        PaperConfigManager config = getConfigManager();
-        
-        PaperInventoryData data = databaseManager.loadInventory(player.getUniqueId(), config.getServerId());
-        
-        if (data == null) {
-            logger.info("玩家 " + player.getName() + " 沒有已保存的背包資料");
-            return;
+    @Override
+    protected String getCurrentVersion() {
+        try {
+            return org.bukkit.Bukkit.getMinecraftVersion();
+        } catch (Exception e) {
+            logger.warning("無法獲取 Minecraft 版本，使用預設值: " + e.getMessage());
+            return getConfigManager().getMinecraftVersion();
         }
-        
-        // Load main inventory
-        player.getInventory().clear();
-        ItemStack[] items = PaperItemSerializer.deserializeInventory(data.inventoryData());
-        if (items != null) {
-            player.getInventory().setContents(items);
-        }
-        
-        // Load ender chest if enabled and data exists
-        if (config.isSyncEnderChest() && data.enderChestData() != null) {
-            ItemStack[] enderItems = PaperItemSerializer.deserializeInventory(data.enderChestData());
-            if (enderItems != null) {
-                player.getEnderChest().setContents(enderItems);
+    }
+    
+    @Override
+    protected int getCurrentDataVersion() {
+        try {
+            String version = getCurrentVersion();
+            
+            // 根據版本號推斷數據版本
+            if (version.startsWith("1.21.4")) {
+                return 4071;
+            } else if (version.startsWith("1.21.5")) {
+                return 4073;
+            } else if (version.startsWith("1.21.6")) {
+                return 4076;
+            } else if (version.startsWith("1.21.7")) {
+                return 4079;
+            } else if (version.startsWith("1.21.8")) {
+                return 4082;
+            } else if (version.startsWith("1.21")) {
+                return 4071;
+            } else {
+                logger.warning("未知的 Minecraft 版本: " + version + "，使用預設數據版本");
+                return 4071;
             }
+        } catch (Exception e) {
+            logger.warning("無法獲取數據版本，使用預設值: " + e.getMessage());
+            return 4071;
         }
-        
-        // Load experience if enabled
-        if (config.isSyncExperience()) {
-            player.setLevel(data.experienceLevel());
-            player.setTotalExperience(data.experience());
-        }
-        
-        // Load health if enabled
-        if (config.isSyncHealth()) {
-            AttributeInstance maxHealthAttribute = player.getAttribute(Attribute.MAX_HEALTH);
-            double maxHealth = maxHealthAttribute != null ? maxHealthAttribute.getValue() : 20.0;
-            player.setHealth(Math.min(data.health(), maxHealth));
-        }
-        
-        // Load hunger if enabled
-        if (config.isSyncHunger()) {
-            player.setFoodLevel(data.hunger());
-        }
-        
-        // Update player
-        player.updateInventory();
+    }
+    
+    @Override
+    protected Logger getLogger() {
+        return new Logger() {
+            @Override
+            public void info(String message) {
+                logger.info(message);
+            }
+            
+            @Override
+            public void warning(String message) {
+                logger.warning(message);
+            }
+            
+            @Override
+            public void severe(String message) {
+                logger.severe(message);
+            }
+        };
+    }
+    
+    @Override
+    protected void logError(String message, Exception e) {
+        logger.severe(message + ": " + e.getMessage());
+        e.printStackTrace();
     }
     
     private PaperConfigManager getConfigManager() {
         return site.chococar.inventorybridge.paper.ChococarsInventoryBridgePlugin.getInstance().getConfigManager();
     }
     
-    public boolean isSyncInProgress(UUID playerUuid) {
-        return syncInProgress.getOrDefault(playerUuid, false);
-    }
-    
-    public long getLastSyncTime(UUID playerUuid) {
-        return lastSyncTimes.getOrDefault(playerUuid, 0L);
-    }
     
     public void scanAndSyncExistingPlayerFiles() {
         if (hasScannedPlayerFiles) {
@@ -518,57 +419,8 @@ public class PaperInventorySyncManager {
         }
     }
     
-    /**
-     * 動態獲取當前數據版本
-     */
-    private int getCurrentDataVersion() {
-        try {
-            // 嘗試使用更現代的方法獲取數據版本
-            String version = getCurrentVersion();
-            
-            // 根據版本號推斷數據版本
-            if (version.startsWith("1.21.4")) {
-                return 4071;
-            } else if (version.startsWith("1.21.5")) {
-                return 4073;
-            } else if (version.startsWith("1.21.6")) {
-                return 4076;
-            } else if (version.startsWith("1.21.7")) {
-                return 4079;
-            } else if (version.startsWith("1.21.8")) {
-                return 4082;
-            } else if (version.startsWith("1.21")) {
-                // 對於其他 1.21.x 版本，使用合理的預設值
-                return 4071;
-            } else {
-                logger.warning("未知的 Minecraft 版本: " + version + "，使用預設數據版本");
-                return 4071;
-            }
-        } catch (Exception e) {
-            logger.warning("無法獲取數據版本，使用預設值: " + e.getMessage());
-            return 4071; // 1.21.4 的數據版本
-        }
-    }
     
-    /**
-     * 動態獲取當前 Minecraft 版本
-     */
-    private String getCurrentVersion() {
-        try {
-            return org.bukkit.Bukkit.getMinecraftVersion();
-        } catch (Exception e) {
-            logger.warning("無法獲取 Minecraft 版本，使用預設值: " + e.getMessage());
-            return getConfigManager().getMinecraftVersion();
-        }
-    }
     
-    /**
-     * 創建基本的背包佔位資料，避免完全空白
-     */
-    private String createBasicInventoryPlaceholder() {
-        // 返回一個基本的JSON結構，表示空背包但格式正確
-        return "{\"size\":41,\"minecraft_version\":\"" + getCurrentVersion() + "\",\"data_version\":" + getCurrentDataVersion() + ",\"items\":{}}";
-    }
     
     /**
      * 從NBT資料流讀取玩家資料

@@ -31,7 +31,7 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
             databaseManager.initialize();
             
             // Initialize sync manager
-            syncManager = new PaperInventorySyncManager(databaseManager);
+            syncManager = new PaperInventorySyncManager(databaseManager, configManager.getConfigurationManager());
             getLogger().info("Sync manager initialized");
             
             // Register events
@@ -132,7 +132,7 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
             databaseManager.reconnect();
             
             // 重新初始化同步管理器
-            syncManager = new PaperInventorySyncManager(databaseManager);
+            syncManager = new PaperInventorySyncManager(databaseManager, configManager.getConfigurationManager());
             
             if (!databaseManager.isStandbyMode()) {
                     getLogger().info("✅ 配置重新載入完成");
@@ -168,7 +168,7 @@ public class ChococarsInventoryBridgePlugin extends JavaPlugin implements Listen
         
         if (success) {
             // 重新初始化同步管理器
-            syncManager = new PaperInventorySyncManager(databaseManager);
+            syncManager = new PaperInventorySyncManager(databaseManager, configManager.getConfigurationManager());
             
             // 重新連接成功後，掃描現有玩家檔案
             syncManager.scanAndSyncExistingPlayerFiles();
