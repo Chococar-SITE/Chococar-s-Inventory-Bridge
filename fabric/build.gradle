@@ -17,6 +17,7 @@ loom {
         "chococars_inventory_bridge" {
             sourceSet sourceSets.main
             sourceSet sourceSets.client
+            sourceSet sourceSets.test
         }
     }
 }
@@ -41,8 +42,21 @@ dependencies {
     // 包含 SLF4J 實現 (避免日誌錯誤)
     include 'org.slf4j:slf4j-simple:2.0.7'
     
-    // 測試依賴
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'
+    // 測試依賴 - 改為不使用 mod 環境的普通測試
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.9.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.9.2'
+    testImplementation 'org.mockito:mockito-core:5.1.1'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.1.1'
+    testImplementation 'com.h2database:h2:2.2.220'
+    
+    // 將主要代碼作為測試依賴，但不包括 Minecraft 環境
+    testImplementation project(':common')
+}
+
+test {
+    useJUnitPlatform()
 }
 
 processResources {
@@ -70,8 +84,4 @@ publishing {
             from components.java
         }
     }
-}
-
-test {
-    useJUnitPlatform()
 }

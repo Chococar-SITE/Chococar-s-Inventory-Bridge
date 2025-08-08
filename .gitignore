@@ -133,6 +133,18 @@ pip-delete-this-directory.txt
 *.backup
 *.old
 
-# Important: Keep these files in version control
+# Local development tools (excluded from CI/CD)
+fix-build-path.bat
+diagnose-java-issues.bat
+build-all*.bat
+run-tests.bat
+test_api.py
+test_errors.log
+BUILD-PATH-TROUBLESHOOTING.md
+QUICK-FIX.md
+README-Testing.md
+
+# Important: Keep these files in version control for CI/CD
 # !data/latest_versions.json
-# !requirements.txt
+# !scripts/fetch-latest-versions.py
+# !scripts/check-versions.ps1
