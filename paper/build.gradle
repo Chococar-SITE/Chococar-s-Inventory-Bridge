@@ -1,7 +1,7 @@
 plugins {
     id 'java'
     id 'io.papermc.paperweight.userdev' version '2.0.0-beta.18'
-    id 'xyz.jpenilla.run-paper' version '2.3.0'
+    id 'xyz.jpenilla.run-paper' version '2.3.1'
     id 'maven-publish'
 }
 
@@ -29,20 +29,20 @@ dependencies {
     // 共通模組 (包含所有必要依賴)
     implementation project(':common')
     
-    // 直接依賴項
-    implementation 'mysql:mysql-connector-java:8.0.33'
+    // 直接依賴項 - 統一版本
+    implementation 'com.mysql:mysql-connector-j:8.4.0'
     implementation 'com.zaxxer:HikariCP:5.0.1'
     implementation 'org.yaml:snakeyaml:2.0'
     implementation 'org.slf4j:slf4j-api:2.0.7'
     
-    // 測試依賴
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.9.2'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.9.2'
-    testImplementation 'org.mockito:mockito-core:5.1.1'
-    testImplementation 'org.mockito:mockito-junit-jupiter:5.1.1'
-    testImplementation 'com.h2database:h2:2.2.220'
+    // 測試依賴 - 統一版本管理
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junit_version}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junit_version}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.1'
+    testImplementation "org.junit.jupiter:junit-jupiter-params:${junit_version}"
+    testImplementation "org.mockito:mockito-core:${mockito_version}"
+    testImplementation "org.mockito:mockito-junit-jupiter:${mockito_version}"
+    testImplementation "com.h2database:h2:${h2_version}"
 }
 
 tasks {
@@ -54,9 +54,7 @@ tasks {
         options.encoding = 'UTF-8'
     }
     
-    test {
-        useJUnitPlatform()
-    }
+    // test 配置已在根 build.gradle 統一處理
     
     processResources {
         filteringCharset = 'UTF-8'

@@ -42,39 +42,39 @@ dependencies {
     // 包含 SLF4J 實現 (避免日誌錯誤)
     include 'org.slf4j:slf4j-simple:2.0.7'
     
-    // 測試依賴 - 改為不使用 mod 環境的普通測試
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.9.2'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.9.2'
-    testImplementation 'org.mockito:mockito-core:5.1.1'
-    testImplementation 'org.mockito:mockito-junit-jupiter:5.1.1'
-    testImplementation 'com.h2database:h2:2.2.220'
-    
-    // 將主要代碼作為測試依賴，但不包括 Minecraft 環境
-    testImplementation project(':common')
+    // 測試依賴 - 統一版本管理
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junit_version}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junit_version}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.1'
+    testImplementation "org.junit.jupiter:junit-jupiter-params:${junit_version}"
+    testImplementation "org.mockito:mockito-core:${mockito_version}"
+    testImplementation "org.mockito:mockito-junit-jupiter:${mockito_version}"
+    testImplementation "com.h2database:h2:${h2_version}"
 }
 
-test {
-    useJUnitPlatform()
-}
+// test 配置已在根 build.gradle 統一處理
 
 processResources {
-    inputs.property "version", project.version
-    inputs.property "minecraft_version", project.minecraft_version
-    inputs.property "loader_version", project.loader_version
-    filteringCharset "UTF-8"
+    def versionValue = project.version
+    def minecraftVersionValue = project.minecraft_version
+    def loaderVersionValue = project.loader_version
+    
+    inputs.property "version", versionValue
+    inputs.property "minecraft_version", minecraftVersionValue
+    inputs.property "loader_version", loaderVersionValue
+    filteringCharset = "UTF-8"
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version,
-                "minecraft_version": project.minecraft_version,
-                "loader_version": project.loader_version
+        expand "version": versionValue,
+                "minecraft_version": minecraftVersionValue,
+                "loader_version": loaderVersionValue
     }
 }
 
 jar {
+    def archivesName = project.base.archivesName.get()
     from("../LICENSE") {
-        rename { "${it}_${project.base.archivesName.get()}"}
+        rename { "${it}_${archivesName}"}
     }
 }
 

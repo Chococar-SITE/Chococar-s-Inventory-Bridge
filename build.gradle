@@ -17,9 +17,9 @@ allprojects {
 }
 
 subprojects {
-    apply plugin: 'java'
-    apply plugin: 'eclipse'
-    apply plugin: 'idea'
+    plugins.apply('java')
+    plugins.apply('eclipse')
+    plugins.apply('idea')
     
     java {
         toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -31,11 +31,19 @@ subprojects {
     }
     
     dependencies {
-        // 共通依賴
-        implementation 'mysql:mysql-connector-java:8.0.33'
+        // 共通依賴 - 統一使用最新版本
+        implementation 'com.mysql:mysql-connector-j:8.4.0'
         implementation 'com.google.code.gson:gson:2.10.1'
         implementation 'com.zaxxer:HikariCP:5.0.1'
         implementation 'org.yaml:snakeyaml:2.0'
+    }
+    
+    // 統一測試依賴配置
+    tasks.withType(Test) {
+        useJUnitPlatform()
+        testLogging {
+            events "passed", "skipped", "failed"
+        }
     }
     
     // Eclipse 配置

@@ -14,16 +14,14 @@ dependencies {
     api 'com.zaxxer:HikariCP:5.0.1'
     api 'com.google.code.gson:gson:2.10.1'
     
-    // 測試依賴
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.9.2'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.9.2'
-    testImplementation 'org.mockito:mockito-core:5.1.1'
-    testImplementation 'org.mockito:mockito-junit-jupiter:5.1.1'
-    testImplementation 'com.h2database:h2:2.2.220' // 內存數據庫用於測試
+    // 測試依賴 - 統一版本管理
+    testImplementation "org.junit.jupiter:junit-jupiter-api:${junit_version}"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junit_version}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.1'
+    testImplementation "org.junit.jupiter:junit-jupiter-params:${junit_version}"
+    testImplementation "org.mockito:mockito-core:${mockito_version}"
+    testImplementation "org.mockito:mockito-junit-jupiter:${mockito_version}"
+    testImplementation "com.h2database:h2:${h2_version}" // 內存數據庫用於測試
 }
 
-test {
-    useJUnitPlatform()
-}
+// test 配置已在根 build.gradle 統一處理
